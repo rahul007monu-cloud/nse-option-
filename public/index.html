@@ -19,8 +19,10 @@
 
     <div class="controls">
       <label class="ctrl">
-        <span>Symbol</span>
-        <select id="symbol"></select>
+        <span>Symbol <span id="symCount" class="count"></span></span>
+        <input id="symbol" list="symList" autocomplete="off" spellcheck="false"
+               placeholder="Search e.g. RELIANCE" value="NIFTY" />
+        <datalist id="symList"></datalist>
       </label>
       <label class="ctrl">
         <span>Expiry</span>
@@ -41,7 +43,7 @@
   <!-- Top summary strip -->
   <section class="strip">
     <div class="spot-box">
-      <span class="k">Spot</span>
+      <span class="k"><span id="symName">NIFTY</span> <span id="typeBadge" class="badge"></span></span>
       <span class="spot" id="spot">--</span>
       <span class="src" id="source"></span>
     </div>
@@ -92,6 +94,15 @@
       </div>
     </section>
   </div>
+
+  <!-- Daily EMA (DEMA) support/resistance -->
+  <section class="card levels-card" id="demaCard">
+    <div class="card-head">
+      <h2>Daily EMA Levels (DEMA) <small>— price ke neeche = support, upar = resistance</small></h2>
+      <span class="trend-badge" id="trendBadge">--</span>
+    </div>
+    <div class="dema-row" id="demaRow"></div>
+  </section>
 
   <!-- Option chain table -->
   <section class="card table-card">

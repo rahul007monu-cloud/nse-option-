@@ -107,12 +107,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/symbols') {
-      const symbols = Object.keys(nse.SYMBOLS).map((s) => ({
-        symbol: s,
-        lot: nse.SYMBOLS[s].lot,
-        step: nse.SYMBOLS[s].step,
-      }));
-      return sendJSON(res, 200, { symbols });
+      return sendJSON(res, 200, nse.listSymbols());
     }
 
     if (pathname === '/api/analysis') {
@@ -120,8 +115,11 @@ const server = http.createServer(async (req, res) => {
       const preferMock = parsed.searchParams.get('mock') === '1';
       const expiryIndex = parseInt(parsed.searchParams.get('expiry') || '0', 10) || 0;
 
-      const chain = await nse.getOptionChain(symbol, { preferMock, expiryIndex });
-      const result = analyze(chain);
+      const [chain, daily] = await Promise.all([
+        nse.getOptionChain(symbol, { preferMock, expiryIndex }),
+        nse.getDailyHistory(symbol, { preferMock }),
+      ]);
+      const result = analyze(chain, { daily });
 
       // record + attach history
       pushHistory(result.symbol, {

@@ -18,20 +18,31 @@ const signed = (n) => (n > 0 ? '+' : '') + fmtK(n);
 let timer = null;
 
 // ---- bootstrap symbols -----------------------------------------------------
+const validSymbols = new Map(); // symbol -> type
+
 async function loadSymbols() {
   try {
     const r = await fetch('/api/symbols');
-    const { symbols } = await r.json();
-    const sel = $('symbol');
-    sel.innerHTML = symbols.map((s) => `<option value="${s.symbol}">${s.symbol}</option>`).join('');
+    const data = await r.json();
+    const dl = $('symList');
+    const all = [
+      ...data.indices.map((s) => ({ ...s })),
+      ...data.stocks.map((s) => ({ ...s })),
+    ];
+    validSymbols.clear();
+    all.forEach((s) => validSymbols.set(s.symbol, s.type));
+    dl.innerHTML = all
+      .map((s) => `<option value="${s.symbol}">${s.type === 'index' ? '📊 Index' : '📈 Stock'} · lot ${s.lot}</option>`)
+      .join('');
+    $('symCount').textContent = `(${data.total})`;
   } catch (e) {
-    $('symbol').innerHTML = '<option>NIFTY</option>';
+    validSymbols.set('NIFTY', 'index');
   }
 }
 
 // ---- main fetch + render ---------------------------------------------------
 async function refresh() {
-  const symbol = $('symbol').value || 'NIFTY';
+  const symbol = ($('symbol').value || 'NIFTY').trim().toUpperCase();
   const mock = $('mock').checked ? '1' : '0';
   const expiry = $('expiry').value || '0';
   try {
@@ -47,7 +58,11 @@ function render(d) {
   // expiry dropdown (populate once per set)
   populateExpiry(d.expiryDates);
 
-  // spot + source
+  // spot + source + symbol name/type
+  $('symName').textContent = d.symbol;
+  const badge = $('typeBadge');
+  badge.textContent = d.type === 'index' ? 'INDEX' : 'STOCK';
+  badge.className = 'badge ' + (d.type === 'index' ? 'badge-idx' : 'badge-stk');
   $('spot').textContent = fmt(d.underlyingValue);
   $('source').textContent = 'source: ' + d.source;
 
@@ -81,6 +96,9 @@ function render(d) {
   $('ceChg').textContent = signed(d.totals.ceChgOI);
   $('peChg').textContent = signed(d.totals.peChgOI);
   $('pcrChg').textContent = d.pcrChange == null ? '—' : fmt(d.pcrChange, 2);
+
+  // DEMA levels
+  renderDEMA(d.movingAverages);
 
   // table
   renderTable(d);
@@ -128,6 +146,34 @@ function renderTable(d) {
         <td class="pe">${fmtK(s.PE.oi)}</td>
         <td class="verdict">${pill}</td>
       </tr>`;
+    })
+    .join('');
+}
+
+function renderDEMA(ma) {
+  const card = $('demaCard');
+  const row = $('demaRow');
+  const tb = $('trendBadge');
+  if (!ma || !ma.levels) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+  tb.textContent = 'Trend: ' + ma.trend.label;
+  tb.style.color = ma.trend.dir === 'up' ? 'var(--up)' : ma.trend.dir === 'down' ? 'var(--down)' : 'var(--muted)';
+
+  row.innerHTML = ma.levels
+    .map((l) => {
+      const isSup = l.role === 'support';
+      const color = isSup ? 'var(--up)' : 'var(--down)';
+      const tag = isSup ? 'SUPPORT' : 'RESISTANCE';
+      const arrow = isSup ? '▼ below' : '▲ above';
+      return `<div class="dema-cell" style="border-color:${color}">
+        <span class="dema-name">${l.name}</span>
+        <span class="dema-val">${fmt(l.value, 2)}</span>
+        <span class="dema-tag" style="color:${color}">${tag}</span>
+        <span class="dema-dist">${arrow} · ${l.distPct != null ? (l.distPct > 0 ? '+' : '') + l.distPct + '%' : ''}</span>
+      </div>`;
     })
     .join('');
 }

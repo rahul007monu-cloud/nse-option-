@@ -22,7 +22,8 @@
  */
 
 const greeks = require('./greeks');
-const { RISK_FREE, SYMBOLS, daysToExpiry } = require('./nse');
+const { RISK_FREE, resolveConfig, daysToExpiry } = require('./nse');
+const technicals = require('./technicals');
 
 // Signal buckets (green = up, red = down) ------------------------------------
 const SIGNALS = {
@@ -47,9 +48,11 @@ function scoreToSignal(score) {
 }
 
 // -----------------------------------------------------------------------------
-function analyze(chain) {
-  const cfg = SYMBOLS[chain.symbol] || SYMBOLS.NIFTY;
+function analyze(chain, opts = {}) {
+  const cfg = resolveConfig(chain.symbol);
   const spot = chain.underlyingValue;
+  const daily = opts.daily && opts.daily.length ? opts.daily : null;
+  const ma = daily ? technicals.movingAverages(daily, spot) : null;
   const rows = [...chain.rows].sort((a, b) => a.strikePrice - b.strikePrice);
 
   // ATM = strike closest to spot
@@ -196,6 +199,17 @@ function analyze(chain) {
     else { reasons.push(`Spot Max Pain (${maxPain}) ke paas → balanced`); }
   }
 
+  // 5) Daily EMA (DEMA) trend structure
+  if (ma && ma.trend) {
+    const t = ma.trend;
+    score += t.score * 0.2; // scale trend into the blend (max ±20)
+    if (t.dir === 'up') reasons.push(`Trend: ${t.label} — ${t.note}`);
+    else if (t.dir === 'down') reasons.push(`Trend: ${t.label} — ${t.note}`);
+    else reasons.push(`Trend: ${t.label}`);
+    if (ma.supports[0]) reasons.push(`Neeche support (DEMA): ${ma.supports[0].name} @ ${ma.supports[0].value}`);
+    if (ma.resistances[0]) reasons.push(`Upar resistance (DEMA): ${ma.resistances[0].name} @ ${ma.resistances[0].value}`);
+  }
+
   score = clamp(score, -100, 100);
   const signal = scoreToSignal(score);
   const strength = Math.round(Math.abs(score)); // 0..100
@@ -214,6 +228,7 @@ function analyze(chain) {
 
   return {
     symbol: chain.symbol,
+    type: chain.type || cfg.type,
     source: chain.source,
     underlyingValue: spot,
     timestamp: chain.timestamp,
@@ -232,6 +247,9 @@ function analyze(chain) {
     resistance,
     strongestSupport: support[0] || null,
     strongestResistance: resistance[0] || null,
+    movingAverages: ma
+      ? { levels: ma.levels, supports: ma.supports, resistances: ma.resistances, trend: ma.trend }
+      : null,
     momentum: {
       key: signal.key,
       label: signal.label,

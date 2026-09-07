@@ -218,3 +218,55 @@ td.resistance-cell { box-shadow: inset -3px 0 0 var(--down); }
   .grid { grid-template-columns: 1fr; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+
+/* ---------- Symbol search input + badges (v2) ---------- */
+.ctrl input[list] {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 150px;
+  font-size: 14px;
+}
+.count { color: var(--accent); font-weight: 600; }
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+  letter-spacing: .5px;
+}
+.badge-idx { background: rgba(76,141,255,0.2); color: #7db0ff; }
+.badge-stk { background: rgba(46,204,113,0.18); color: #67d98d; }
+
+/* ---------- DEMA levels card ---------- */
+.levels-card { margin: 0 20px 16px; }
+.trend-badge { font-size: 13px; font-weight: 700; }
+.dema-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+.dema-cell {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dema-name { font-size: 12px; color: var(--muted); }
+.dema-val { font-size: 20px; font-weight: 700; }
+.dema-tag { font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+.dema-dist { font-size: 11px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .dema-row { grid-template-columns: repeat(2, 1fr); }
+}

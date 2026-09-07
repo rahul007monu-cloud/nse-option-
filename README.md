@@ -11,6 +11,11 @@ A zero‑dependency Node.js web app that reads an NSE index option chain and tur
 - A single **Momentum signal**: `Strong Bullish … Neutral … Strong Bearish`
   (🟢 green = UP, 🔴 red = DOWN) with a 0–100 strength and **plain‑language reasons**
 - **Per‑strike verdict** — e.g. *"Put writing — Support (▲ UP)"* or *"Call writing — Resistance (▼ DOWN)"*
+- **Whole NSE F&O universe** — all indices **and** F&O stocks (~300 instruments), with a searchable picker
+- **Daily EMA (DEMA) levels** — 10 / 20 / 50 / 100 / 200 DEMA shown as **support** (below price) or **resistance** (above price), plus an EMA‑stack **trend** read that feeds the momentum score
+
+> **Scope:** Option chains exist only for **F&O** securities (indices + the NSE F&O stock list),
+> not for cash‑only stocks. "DEMA" here means **Daily EMA** (the daily‑timeframe EMA).
 
 > The core read is exactly what LTP‑Calculator users watch:
 > **fresh Put writing → support builds → price tends UP**, and
@@ -40,7 +45,7 @@ PORT=8080 node server.js
 | Endpoint | Description |
 |---|---|
 | `GET /api/health` | Liveness + Node version |
-| `GET /api/symbols` | Supported instruments (NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY) |
+| `GET /api/symbols` | Full F&O universe grouped as `{ indices, stocks, total }` |
 | `GET /api/analysis?symbol=NIFTY&expiry=0&mock=1` | Full analysis (ATM, PCR, Max Pain, S/R, Greeks, momentum, per‑strike verdicts) + recent history |
 | `GET /api/history?symbol=NIFTY` | Spot / PCR / momentum‑score time series (for charts) |
 
@@ -72,9 +77,13 @@ The data layer (`src/nse.js`) tries three sources in order and normalises them t
        ],
      };
    });
+
+   // Optional: daily candles for the DEMA levels (oldest -> newest closes)
+   nse.setHistoryFetcher(async (symbol) => [/* ...daily close prices... */]);
    ```
 
 2. **Live NSE** — direct `https` fetch from `nseindia.com` with cookie priming.
+   Indices use `/api/option-chain-indices`, stocks use `/api/option-chain-equities`.
    Works when you run this on **your own machine / VPS** with real outbound internet.
    NSE aggressively rate‑limits/blocks datacenter IPs, so a broker feed is more reliable.
 
@@ -106,12 +115,14 @@ colored arrow + strength bar, with the contributing reasons listed in plain lang
 
 ```
 server.js            HTTP server + API + in‑memory history
+data/symbols.js      NSE F&O universe (indices + F&O stocks + ref prices)
 src/greeks.js        Black‑Scholes price + Greeks + IV solver
-src/nse.js           Broker hook → live NSE → mock (normalised chain)
-src/analysis.js      ATM, PCR, Max Pain, S/R, per‑strike verdict, momentum
+src/nse.js           Broker/live/mock chain + daily history (for DEMA) + symbol config
+src/technicals.js    Daily EMA (10/20/50/100/200 DEMA) support/resistance + trend
+src/analysis.js      ATM, PCR, Max Pain, S/R, per‑strike verdict, momentum, DEMA
 public/index.html    UI markup
 public/style.css     Dark trading‑desk theme
-public/app.js        Fetch loop, canvas chart, table, 5s refresh
+public/app.js        Fetch loop, canvas chart, table, DEMA panel, 5s refresh
 ```
 
 ---
