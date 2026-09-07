@@ -20,9 +20,10 @@
     <div class="controls">
       <label class="ctrl">
         <span>Symbol <span id="symCount" class="count"></span></span>
-        <input id="symbol" list="symList" autocomplete="off" spellcheck="false"
-               placeholder="Search e.g. RELIANCE" value="NIFTY" />
-        <datalist id="symList"></datalist>
+        <div class="sym-wrap">
+          <input id="symSearch" type="text" autocomplete="off" spellcheck="false" placeholder="🔍 filter…" />
+          <select id="symbol"></select>
+        </div>
       </label>
       <label class="ctrl">
         <span>Expiry</span>
@@ -46,6 +47,7 @@
       <span class="k"><span id="symName">NIFTY</span> <span id="typeBadge" class="badge"></span></span>
       <span class="spot" id="spot">--</span>
       <span class="src" id="source"></span>
+      <span class="market" id="marketBadge"></span>
     </div>
 
     <div class="momentum" id="momentumBox">
@@ -129,6 +131,18 @@
           </tr>
         </thead>
         <tbody id="chainBody"></tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td class="ce" id="tCeOI">--</td>
+            <td class="ce" id="tCeChg">--</td>
+            <td class="ce" colspan="3">Total CALL OI →</td>
+            <td class="strike">TOTAL</td>
+            <td class="pe" colspan="3">← Total PUT OI</td>
+            <td class="pe" id="tPeChg">--</td>
+            <td class="pe" id="tPeOI">--</td>
+            <td class="verdict" id="tVerdict">--</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
     <p class="disclaimer">

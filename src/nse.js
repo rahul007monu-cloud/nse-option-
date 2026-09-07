@@ -130,6 +130,22 @@ function daysToExpiry(date) {
   return Math.max(ms / (1000 * 60 * 60 * 24), 0.25 / 24);
 }
 
+// ---- Market hours (IST, NSE: Mon-Fri 09:15-15:30) --------------------------
+/** Current time in IST regardless of the server's own timezone. */
+function istNow() {
+  const d = new Date();
+  const utcMs = d.getTime() + d.getTimezoneOffset() * 60000; // -> UTC
+  return new Date(utcMs + 5.5 * 3600000); // -> IST
+}
+/** Returns { open:boolean, status:'OPEN'|'CLOSED', ist:Date }. */
+function marketStatus() {
+  const ist = istNow();
+  const day = ist.getDay(); // 0 Sun .. 6 Sat
+  const mins = ist.getHours() * 60 + ist.getMinutes();
+  const open = day >= 1 && day <= 5 && mins >= 555 && mins <= 930; // 09:15..15:30
+  return { open, status: open ? 'OPEN' : 'CLOSED', ist };
+}
+
 // ---- Seeded RNG (deterministic mock per symbol) ----------------------------
 function seedFrom(symbol) {
   let h = 1779033703 ^ symbol.length;
@@ -190,11 +206,15 @@ async function getDailyHistory(symbol, opts = {}) {
 
 // ---- MOCK: option chain (evolving intraday state) --------------------------
 const mockState = {};
-function seededSpot(cfg, sym) {
+const frozenChain = {}; // key -> stable chain snapshot used when market is closed
+
+function seededSpot(cfg, sym, marketOpen) {
   if (!mockState[sym]) {
     mockState[sym] = { spot: cfg.base, tick: 0, oi: {}, bias: (Math.random() - 0.5) * 0.6 };
   }
   const st = mockState[sym];
+  // When the market is closed, prices/OI must NOT move — return current state as-is.
+  if (!marketOpen) return st;
   st.tick += 1;
   st.bias += (Math.random() - 0.5) * 0.08;
   st.bias = Math.max(-1, Math.min(1, st.bias * 0.98));
@@ -205,8 +225,14 @@ function seededSpot(cfg, sym) {
   return st;
 }
 
-function buildMock(symbol, cfg, expiryDate) {
-  const st = seededSpot(cfg, symbol);
+function buildMock(symbol, cfg, expiryDate, marketOpen) {
+  const key = symbol + '|' + formatExpiry(expiryDate);
+  // Market closed + we already built a snapshot -> return the SAME frozen data
+  // (deep clone) so every poll is identical (no blinking / drifting numbers).
+  if (!marketOpen && frozenChain[key]) {
+    return JSON.parse(JSON.stringify(frozenChain[key]));
+  }
+  const st = seededSpot(cfg, symbol, marketOpen);
   const spot = st.spot;
   const atm = Math.round(spot / cfg.step) * cfg.step;
   const half = Math.floor(cfg.strikes / 2);
@@ -261,13 +287,16 @@ function buildMock(symbol, cfg, expiryDate) {
     });
   }
 
-  return {
+  const chain = {
     source: 'mock', symbol, type: cfg.type,
     underlyingValue: round(spot, 2),
     timestamp: new Date().toISOString(),
     expiry: formatExpiry(expiryDate),
     rows,
   };
+  // Cache as the frozen EOD snapshot when the market is closed.
+  if (!marketOpen) frozenChain[key] = JSON.parse(JSON.stringify(chain));
+  return chain;
 }
 
 // ---- LIVE NSE --------------------------------------------------------------
@@ -341,6 +370,13 @@ async function getOptionChain(symbol, opts = {}) {
   const expiryDates = expiries.map(formatExpiry);
   const idx = Math.min(Math.max(opts.expiryIndex || 0, 0), expiries.length - 1);
 
+  const mkt = marketStatus();
+  const stamp = (chain) => {
+    chain.marketOpen = mkt.open;
+    chain.marketStatus = mkt.status;
+    return chain;
+  };
+
   if (brokerFetcher && !opts.preferMock) {
     try {
       const chain = await brokerFetcher(symbol, expiryDates[idx]);
@@ -348,7 +384,7 @@ async function getOptionChain(symbol, opts = {}) {
         chain.source = chain.source || 'broker';
         chain.type = chain.type || cfg.type;
         chain.expiryDates = chain.expiryDates || expiryDates;
-        return chain;
+        return stamp(chain);
       }
     } catch (_) { /* fall through */ }
   }
@@ -358,14 +394,14 @@ async function getOptionChain(symbol, opts = {}) {
       const chain = await fetchLiveNSE(symbol, cfg);
       if (chain && chain.rows && chain.rows.length) {
         chain.expiryDates = chain.expiryDates && chain.expiryDates.length ? chain.expiryDates : expiryDates;
-        return chain;
+        return stamp(chain);
       }
     } catch (_) { /* fall through */ }
   }
 
-  const chain = buildMock(symbol, cfg, expiries[idx]);
+  const chain = buildMock(symbol, cfg, expiries[idx], mkt.open);
   chain.expiryDates = expiryDates;
-  return chain;
+  return stamp(chain);
 }
 
 function round(x, n) { const f = Math.pow(10, n); return Math.round(x * f) / f; }
@@ -382,5 +418,6 @@ module.exports = {
   nextWeeklyExpiries,
   formatExpiry,
   daysToExpiry,
+  marketStatus,
   _internal: { buildMock, normalizeNSE, hashPrice, niceStep, deriveLot },
 };

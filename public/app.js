@@ -1,6 +1,8 @@
 'use strict';
 
-/* NSE Option Chain Analyzer — frontend (vanilla, no libs) */
+/* NSE Option Chain Analyzer — frontend (vanilla, no libs).
+   Rendering is done IN PLACE (no full innerHTML rebuilds on each poll) so the
+   table never flickers/blinks. Numbers flash green/red when they rise/fall. */
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d = 2) =>
@@ -11,14 +13,16 @@ const fmtK = (n) => {
   if (a >= 1e7) return (n / 1e7).toFixed(2) + 'Cr';
   if (a >= 1e5) return (n / 1e5).toFixed(2) + 'L';
   if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K';
-  return String(n);
+  return String(Math.round(n));
 };
 const signed = (n) => (n > 0 ? '+' : '') + fmtK(n);
+const arrowFor = (n) => (n > 0 ? '▲' : n < 0 ? '▼' : '');
 
 let timer = null;
+let lastSeries = [];       // for chart redraw on resize
+let allSymbols = { indices: [], stocks: [] };
 
-// Chart history is accumulated in the browser (works on serverless/Vercel where
-// the server keeps no state). Per-symbol so switching symbols keeps each series.
+// ---- chart history (client-side; serverless keeps no state) ----------------
 const HISTORY_MAX = 240;
 const clientHistory = {};
 function recordHistory(d) {
@@ -27,42 +31,47 @@ function recordHistory(d) {
   const arr = clientHistory[key];
   const last = arr[arr.length - 1];
   if (!last || last.t !== d.timestamp) {
-    arr.push({
-      t: d.timestamp,
-      spot: d.underlyingValue,
-      pcr: d.pcr,
-      score: d.momentum.score,
-      dir: d.momentum.dir,
-    });
+    arr.push({ t: d.timestamp, spot: d.underlyingValue, pcr: d.pcr, score: d.momentum.score, dir: d.momentum.dir });
   }
   if (arr.length > HISTORY_MAX) arr.splice(0, arr.length - HISTORY_MAX);
   return arr;
 }
 
-// ---- bootstrap symbols -----------------------------------------------------
-const validSymbols = new Map(); // symbol -> type
-
+// ---- symbol picker (clickable grouped select + search filter) --------------
 async function loadSymbols() {
   try {
     const r = await fetch('/api/symbols');
     const data = await r.json();
-    const dl = $('symList');
-    const all = [
-      ...data.indices.map((s) => ({ ...s })),
-      ...data.stocks.map((s) => ({ ...s })),
-    ];
-    validSymbols.clear();
-    all.forEach((s) => validSymbols.set(s.symbol, s.type));
-    dl.innerHTML = all
-      .map((s) => `<option value="${s.symbol}">${s.type === 'index' ? '📊 Index' : '📈 Stock'} · lot ${s.lot}</option>`)
-      .join('');
+    allSymbols.indices = data.indices || [];
+    allSymbols.stocks = data.stocks || [];
     $('symCount').textContent = `(${data.total})`;
   } catch (e) {
-    validSymbols.set('NIFTY', 'index');
+    allSymbols.indices = [{ symbol: 'NIFTY', type: 'index', lot: 25 }];
+    allSymbols.stocks = [];
   }
+  buildSelect('');
+  $('symbol').value = 'NIFTY';
 }
 
-// ---- main fetch + render ---------------------------------------------------
+function optHtml(o) {
+  return `<option value="${o.symbol}">${o.symbol}${o.type === 'stock' ? ' · lot ' + o.lot : ''}</option>`;
+}
+function buildSelect(filter) {
+  const sel = $('symbol');
+  const cur = sel.value;
+  const f = (filter || '').trim().toUpperCase();
+  const match = (s) => !f || s.symbol.includes(f);
+  const idx = allSymbols.indices.filter(match);
+  const stk = allSymbols.stocks.filter(match);
+  let html = '';
+  if (idx.length) html += `<optgroup label="Indices">${idx.map(optHtml).join('')}</optgroup>`;
+  if (stk.length) html += `<optgroup label="Stocks (${stk.length})">${stk.map(optHtml).join('')}</optgroup>`;
+  sel.innerHTML = html || '<option value="NIFTY">NIFTY</option>';
+  if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  return idx.length + stk.length;
+}
+
+// ---- fetch + render --------------------------------------------------------
 async function refresh() {
   const symbol = ($('symbol').value || 'NIFTY').trim().toUpperCase();
   const mock = $('mock').checked ? '1' : '0';
@@ -76,11 +85,14 @@ async function refresh() {
   }
 }
 
-function render(d) {
-  // expiry dropdown (populate once per set)
-  populateExpiry(d.expiryDates);
+let lastReasonsKey = '';
+let lastDemaKey = '';
 
-  // spot + source + symbol name/type
+function render(d) {
+  populateExpiry(d.expiryDates);
+  applyMarket(d);
+
+  // header
   $('symName').textContent = d.symbol;
   const badge = $('typeBadge');
   badge.textContent = d.type === 'index' ? 'INDEX' : 'STOCK';
@@ -88,7 +100,7 @@ function render(d) {
   $('spot').textContent = fmt(d.underlyingValue);
   $('source').textContent = 'source: ' + d.source;
 
-  // momentum box
+  // momentum
   const m = d.momentum;
   $('momArrow').textContent = m.arrow;
   $('momArrow').style.color = m.color;
@@ -113,24 +125,42 @@ function render(d) {
   // summary
   $('summary').textContent = d.summary;
 
-  // reasons
-  $('reasons').innerHTML = m.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join('');
+  // reasons (rebuild only when changed -> no flicker)
+  const rKey = m.reasons.join('|');
+  if (rKey !== lastReasonsKey) {
+    $('reasons').innerHTML = m.reasons.map((x) => `<li>${escapeHtml(x)}</li>`).join('');
+    lastReasonsKey = rKey;
+  }
   $('ceChg').textContent = signed(d.totals.ceChgOI);
   $('peChg').textContent = signed(d.totals.peChgOI);
   $('pcrChg').textContent = d.pcrChange == null ? '—' : fmt(d.pcrChange, 2);
 
-  // DEMA levels
+  // DEMA (rebuild only when values change)
   renderDEMA(d.movingAverages);
 
-  // table
-  renderTable(d);
+  // option chain (in-place)
+  updateTable(d);
+  updateTotals(d);
 
-  // chart (history accumulated client-side; server value used if present)
-  const series = recordHistory(d);
-  drawChart(series.length > 1 ? series : d.history || series);
+  // chart
+  lastSeries = recordHistory(d);
+  drawChart(lastSeries);
 
-  // updated
   $('updated').textContent = 'Updated ' + new Date(d.timestamp).toLocaleTimeString('en-IN');
+}
+
+// ---- market open/closed ----------------------------------------------------
+function applyMarket(d) {
+  const closed = d.marketOpen === false;
+  const mb = $('marketBadge');
+  mb.textContent = closed ? '● MARKET CLOSED — data frozen' : '● LIVE';
+  mb.className = 'market ' + (closed ? 'closed' : 'open');
+  // Auto-refresh only makes sense while the market is open.
+  if (closed) {
+    if (timer) { clearInterval(timer); timer = null; }
+  } else {
+    setupTimer();
+  }
 }
 
 function populateExpiry(list) {
@@ -144,53 +174,144 @@ function populateExpiry(list) {
   if (cur && Number(cur) < list.length) sel.value = cur;
 }
 
-function renderTable(d) {
-  const supStrikes = new Set(d.support.map((s) => s.strike));
-  const resStrikes = new Set(d.resistance.map((s) => s.strike));
+// ---- option chain table: build skeleton once, update cells in place --------
+let tableKey = null;
+let cellRefs = {};
+let prevVals = {}; // strike -> { ceOI, ceLTP, peOI, peLTP }
+
+function buildSkeleton(d) {
   const body = $('chainBody');
   body.innerHTML = d.strikes
-    .map((s) => {
-      const atm = s.isATM ? ' atm' : '';
-      const supCell = supStrikes.has(s.strike) ? ' support-cell' : '';
-      const resCell = resStrikes.has(s.strike) ? ' resistance-cell' : '';
-      const v = s.verdict;
-      const pill = `<span class="pill" style="background:${hexToRgba(v.color, 0.18)};color:${v.color}">${dirIcon(v.dir)} ${escapeHtml(v.label)}</span>`;
-      return `<tr class="${atm.trim()}">
-        <td class="ce">${fmtK(s.CE.oi)}</td>
-        <td class="ce ${cls(s.CE.chgOI)}">${signed(s.CE.chgOI)}</td>
-        <td class="ce">${fmt(s.CE.iv, 1)}</td>
-        <td class="ce down">${fmt(s.CE.theta, 2)}</td>
-        <td class="ce">${fmt(s.CE.ltp, 2)}</td>
-        <td class="strike${resCell}${supCell}">${fmt(s.strike, 0)}</td>
-        <td class="pe">${fmt(s.PE.ltp, 2)}</td>
-        <td class="pe down">${fmt(s.PE.theta, 2)}</td>
-        <td class="pe">${fmt(s.PE.iv, 1)}</td>
-        <td class="pe ${cls(s.PE.chgOI)}">${signed(s.PE.chgOI)}</td>
-        <td class="pe">${fmtK(s.PE.oi)}</td>
-        <td class="verdict">${pill}</td>
-      </tr>`;
-    })
+    .map(
+      (s) => `<tr data-strike="${s.strike}">
+      <td class="ce"></td><td class="ce"></td><td class="ce"></td><td class="ce down"></td><td class="ce"></td>
+      <td class="strike"></td>
+      <td class="pe"></td><td class="pe down"></td><td class="pe"></td><td class="pe"></td><td class="pe"></td>
+      <td class="verdict"><span class="pill"></span></td>
+    </tr>`
+    )
     .join('');
+  cellRefs = {};
+  [...body.rows].forEach((tr, i) => {
+    const s = d.strikes[i];
+    const c = tr.cells;
+    cellRefs[s.strike] = {
+      tr, ceOI: c[0], ceChg: c[1], ceIV: c[2], ceTheta: c[3], ceLTP: c[4],
+      strike: c[5], peLTP: c[6], peTheta: c[7], peIV: c[8], peChg: c[9], peOI: c[10],
+      pill: tr.querySelector('.pill'),
+    };
+  });
+  prevVals = {};
+}
+
+function updateTable(d) {
+  const key = d.symbol + '|' + d.expiry + '|' + d.strikes.length + '|' + (d.strikes[0] && d.strikes[0].strike);
+  if (key !== tableKey) {
+    buildSkeleton(d);
+    tableKey = key;
+  }
+  const supStrikes = new Set(d.support.map((s) => s.strike));
+  const resStrikes = new Set(d.resistance.map((s) => s.strike));
+
+  for (const s of d.strikes) {
+    const ref = cellRefs[s.strike];
+    if (!ref) continue;
+    const prev = prevVals[s.strike] || {};
+
+    // CALL side
+    setFlash(ref.ceOI, s.CE.oi, prev.ceOI, fmtK);
+    setChg(ref.ceChg, s.CE.chgOI);
+    setText(ref.ceIV, fmt(s.CE.iv, 1));
+    setText(ref.ceTheta, fmt(s.CE.theta, 2));
+    setFlash(ref.ceLTP, s.CE.ltp, prev.ceLTP, (v) => fmt(v, 2));
+
+    // Strike (with support/resistance edge + ATM)
+    setText(ref.strike, fmt(s.strike, 0));
+    ref.strike.className = 'strike' +
+      (resStrikes.has(s.strike) ? ' resistance-cell' : '') +
+      (supStrikes.has(s.strike) ? ' support-cell' : '');
+    ref.tr.classList.toggle('atm', !!s.isATM);
+
+    // PUT side
+    setFlash(ref.peLTP, s.PE.ltp, prev.peLTP, (v) => fmt(v, 2));
+    setText(ref.peTheta, fmt(s.PE.theta, 2));
+    setText(ref.peIV, fmt(s.PE.iv, 1));
+    setChg(ref.peChg, s.PE.chgOI);
+    setFlash(ref.peOI, s.PE.oi, prev.peOI, fmtK);
+
+    // Verdict pill
+    const v = s.verdict;
+    ref.pill.textContent = `${dirIcon(v.dir)} ${v.label}`;
+    ref.pill.style.background = hexToRgba(v.color, 0.18);
+    ref.pill.style.color = v.color;
+
+    prevVals[s.strike] = { ceOI: s.CE.oi, ceLTP: s.CE.ltp, peOI: s.PE.oi, peLTP: s.PE.ltp };
+  }
+}
+
+let prevTotals = null;
+function updateTotals(d) {
+  const t = d.totals;
+  const ceUp = prevTotals ? t.ceOI - prevTotals.ceOI : 0;
+  const peUp = prevTotals ? t.peOI - prevTotals.peOI : 0;
+
+  const ceEl = $('tCeOI');
+  ceEl.textContent = `${fmtK(t.ceOI)} ${arrowFor(ceUp)}`;
+  if (prevTotals && ceUp) flash(ceEl, ceUp > 0 ? 'up' : 'down');
+  $('tCeChg').textContent = signed(t.ceChgOI);
+  $('tCeChg').className = 'ce ' + cls(t.ceChgOI);
+
+  const peEl = $('tPeOI');
+  peEl.textContent = `${fmtK(t.peOI)} ${arrowFor(peUp)}`;
+  if (prevTotals && peUp) flash(peEl, peUp > 0 ? 'up' : 'down');
+  $('tPeChg').textContent = signed(t.peChgOI);
+  $('tPeChg').className = 'pe ' + cls(t.peChgOI);
+
+  // Verdict: who is heavier + day direction
+  const heavier = t.peOI > t.ceOI ? 'PUT heavy → bullish tilt' : t.ceOI > t.peOI ? 'CALL heavy → bearish tilt' : 'balanced';
+  const dayDir = t.peChgOI - t.ceChgOI;
+  const tag = dayDir > 0 ? '▲ Puts adding faster (UP)' : dayDir < 0 ? '▼ Calls adding faster (DOWN)' : '→ flat';
+  const tv = $('tVerdict');
+  tv.textContent = `PCR ${fmt(d.pcr, 2)} · ${heavier} · ${tag}`;
+  tv.style.color = dayDir > 0 ? 'var(--up)' : dayDir < 0 ? 'var(--down)' : 'var(--muted)';
+
+  prevTotals = { ceOI: t.ceOI, peOI: t.peOI };
+}
+
+// small DOM helpers ----------------------------------------------------------
+function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+function setChg(el, n) {
+  const text = signed(n);
+  if (el.textContent !== text) el.textContent = text;
+  const base = el.classList.contains('pe') ? 'pe ' : 'ce ';
+  el.className = base + cls(n);
+}
+function setFlash(el, value, prev, fmtFn) {
+  const text = fmtFn(value);
+  if (el.textContent !== text) el.textContent = text;
+  if (prev != null && value !== prev) flash(el, value > prev ? 'up' : 'down');
+}
+function flash(el, dir) {
+  el.classList.remove('flash-up', 'flash-down');
+  void el.offsetWidth; // force reflow so the animation restarts
+  el.classList.add(dir === 'up' ? 'flash-up' : 'flash-down');
 }
 
 function renderDEMA(ma) {
   const card = $('demaCard');
-  const row = $('demaRow');
-  const tb = $('trendBadge');
-  if (!ma || !ma.levels) {
-    card.style.display = 'none';
-    return;
-  }
+  if (!ma || !ma.levels) { card.style.display = 'none'; return; }
   card.style.display = '';
-  tb.textContent = 'Trend: ' + ma.trend.label;
-  tb.style.color = ma.trend.dir === 'up' ? 'var(--up)' : ma.trend.dir === 'down' ? 'var(--down)' : 'var(--muted)';
-
-  row.innerHTML = ma.levels
+  const key = ma.levels.map((l) => l.name + l.value + l.role).join('|') + ma.trend.label;
+  $('trendBadge').textContent = 'Trend: ' + ma.trend.label;
+  $('trendBadge').style.color = ma.trend.dir === 'up' ? 'var(--up)' : ma.trend.dir === 'down' ? 'var(--down)' : 'var(--muted)';
+  if (key === lastDemaKey) return;
+  lastDemaKey = key;
+  $('demaRow').innerHTML = ma.levels
     .map((l) => {
       const isSup = l.role === 'support';
       const color = isSup ? 'var(--up)' : 'var(--down)';
       const tag = isSup ? 'SUPPORT' : 'RESISTANCE';
-      const arrow = isSup ? '▼ below' : '▲ above';
+      const arrow = isSup ? '▼ below price' : '▲ above price';
       return `<div class="dema-cell" style="border-color:${color}">
         <span class="dema-name">${l.name}</span>
         <span class="dema-val">${fmt(l.value, 2)}</span>
@@ -204,7 +325,7 @@ function renderDEMA(ma) {
 function cls(n) { return n > 0 ? 'up' : n < 0 ? 'down' : 'flat'; }
 function dirIcon(dir) { return dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→'; }
 
-// ---- Canvas chart (spot line + momentum score line) ------------------------
+// ---- Canvas chart ----------------------------------------------------------
 function drawChart(history) {
   const canvas = $('chart');
   const dpr = window.devicePixelRatio || 1;
@@ -223,12 +344,11 @@ function drawChart(history) {
   if (!history.length) {
     ctx.fillStyle = '#8b98a9';
     ctx.font = '13px sans-serif';
-    ctx.fillText('Collecting data… (auto-refresh every 5s)', padL, padT + h / 2);
+    ctx.fillText('Collecting data…', padL, padT + h / 2);
     return;
   }
 
   const spots = history.map((p) => p.spot);
-  const scores = history.map((p) => p.score);
   let sMin = Math.min(...spots), sMax = Math.max(...spots);
   if (sMin === sMax) { sMin -= 1; sMax += 1; }
   const pad = (sMax - sMin) * 0.1;
@@ -237,9 +357,8 @@ function drawChart(history) {
   const n = history.length;
   const x = (i) => padL + (n === 1 ? w / 2 : (i / (n - 1)) * w);
   const ySpot = (v) => padT + h - ((v - sMin) / (sMax - sMin)) * h;
-  const yScore = (v) => padT + h - ((v + 100) / 200) * h; // -100..100
+  const yScore = (v) => padT + h - ((v + 100) / 200) * h;
 
-  // grid + spot axis labels
   ctx.strokeStyle = '#2a323d';
   ctx.fillStyle = '#8b98a9';
   ctx.font = '10px sans-serif';
@@ -247,10 +366,8 @@ function drawChart(history) {
   for (let i = 0; i <= 4; i++) {
     const gy = padT + (i / 4) * h;
     ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + w, gy); ctx.stroke();
-    const val = sMax - (i / 4) * (sMax - sMin);
-    ctx.fillText(fmt(val, 0), 6, gy + 3);
+    ctx.fillText(fmt(sMax - (i / 4) * (sMax - sMin), 0), 6, gy + 3);
   }
-  // zero line for score (right axis)
   const zy = yScore(0);
   ctx.strokeStyle = 'rgba(139,152,169,0.4)';
   ctx.setLineDash([4, 4]);
@@ -260,27 +377,18 @@ function drawChart(history) {
   ctx.fillText('0', padL + w + 6, zy + 3);
   ctx.fillText('-100', padL + w + 6, yScore(-100) + 3);
 
-  // score area (colored by sign) — draw as line
   ctx.lineWidth = 1.8;
   ctx.strokeStyle = '#2ecc71';
   ctx.beginPath();
-  history.forEach((p, i) => {
-    const xx = x(i), yy = yScore(p.score);
-    i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
-  });
+  history.forEach((p, i) => { const xx = x(i), yy = yScore(p.score); i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy); });
   ctx.stroke();
 
-  // spot line
   ctx.lineWidth = 2.2;
   ctx.strokeStyle = '#4c8dff';
   ctx.beginPath();
-  history.forEach((p, i) => {
-    const xx = x(i), yy = ySpot(p.spot);
-    i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy);
-  });
+  history.forEach((p, i) => { const xx = x(i), yy = ySpot(p.spot); i === 0 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy); });
   ctx.stroke();
 
-  // last spot dot + label
   const last = history[n - 1];
   ctx.fillStyle = '#4c8dff';
   ctx.beginPath();
@@ -290,6 +398,7 @@ function drawChart(history) {
 
 // ---- utils -----------------------------------------------------------------
 function hexToRgba(hex, a) {
+  if (!hex || hex[0] !== '#') return hex;
   const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16);
   const g = parseInt(h.substring(2, 4), 16);
@@ -297,23 +406,32 @@ function hexToRgba(hex, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
-  );
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// ---- auto-refresh control --------------------------------------------------
+// ---- controls --------------------------------------------------------------
 function setupTimer() {
   if (timer) clearInterval(timer);
   if ($('auto').checked) timer = setInterval(refresh, 5000);
 }
 
-['symbol', 'expiry', 'mock'].forEach((id) =>
-  $(id).addEventListener('change', refresh)
-);
+$('symbol').addEventListener('change', () => { tableKey = null; refresh(); });
+$('expiry').addEventListener('change', () => { tableKey = null; refresh(); });
+$('mock').addEventListener('change', refresh);
+$('symSearch').addEventListener('input', (e) => {
+  const count = buildSelect(e.target.value);
+  const sel = $('symbol');
+  // if the filter narrows to a single instrument, load it automatically
+  if (count === 1 && sel.options.length) {
+    sel.selectedIndex = 0;
+    // pick the first real option inside optgroup
+    const first = sel.querySelector('option');
+    if (first) { sel.value = first.value; tableKey = null; refresh(); }
+  }
+});
 $('auto').addEventListener('change', setupTimer);
 $('refresh').addEventListener('click', refresh);
-window.addEventListener('resize', () => refresh());
+window.addEventListener('resize', () => drawChart(lastSeries));
 
 (async function init() {
   await loadSymbols();

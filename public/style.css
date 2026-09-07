@@ -270,3 +270,45 @@ td.resistance-cell { box-shadow: inset -3px 0 0 var(--down); }
 @media (max-width: 900px) {
   .dema-row { grid-template-columns: repeat(2, 1fr); }
 }
+
+
+/* ---------- v3: symbol picker, market badge, flash, totals ---------- */
+.sym-wrap { display: flex; flex-direction: column; gap: 4px; }
+.sym-wrap input {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 8px; font-size: 12px; width: 190px;
+}
+.sym-wrap select {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; min-width: 190px; font-size: 14px;
+}
+
+.market {
+  font-size: 11px; font-weight: 700; margin-top: 2px;
+}
+.market.open { color: var(--up); }
+.market.closed { color: #e0a341; }
+
+/* rise / fall flash on live cells */
+@keyframes flashUp {
+  0% { background: rgba(46, 204, 113, 0.40); }
+  100% { background: transparent; }
+}
+@keyframes flashDown {
+  0% { background: rgba(231, 76, 60, 0.40); }
+  100% { background: transparent; }
+}
+td.flash-up { animation: flashUp 0.9s ease-out; }
+td.flash-down { animation: flashDown 0.9s ease-out; }
+
+/* totals footer row */
+tfoot .totals-row td {
+  border-top: 2px solid var(--line);
+  font-weight: 700;
+  background: var(--panel-2);
+  position: sticky;
+  bottom: 0;
+}
+tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
