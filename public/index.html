@@ -3,163 +3,79 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NSE Option Chain Analyzer — LTP Style</title>
+  <title>OptionPulse — NSE Option Chain Intelligence</title>
+  <meta name="description" content="Real-time NSE F&O option chain analytics: OI, PCR, Greeks, DEMA support/resistance, momentum signals, daily scanner with SL/Target." />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/landing.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0e1117" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📈</text></svg>" />
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">📈</span>
-      <div>
-        <h1>Option Chain Analyzer</h1>
-        <span class="tagline">LTP-calculator style · OI · PCR · IV · Greeks · Momentum</span>
+<body class="landing">
+  <!-- NAV -->
+  <nav class="lnav">
+    <div class="lnav-brand"><span class="logo-orb"></span> OptionPulse</div>
+    <div class="lnav-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <span id="navAuth">
+        <a class="btn ghost" href="/auth.html">Login</a>
+        <a class="btn" href="/auth.html?mode=signup">Get Started</a>
+      </span>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <canvas id="heroCanvas"></canvas>
+    <div class="hero-glow"></div>
+    <div class="hero-content">
+      <div class="badge-pill">⚡ Real-time NSE F&O intelligence</div>
+      <h1 class="hero-title">Trade with a <span class="grad">clear signal</span>,<br/>not noise.</h1>
+      <p class="hero-sub">
+        Live option-chain analytics — OI, PCR, IV, Greeks, DEMA support/resistance,
+        and a daily scanner that finds bullish, bearish, golden-cross & breakout
+        setups with Stop-Loss and Target — all in one place.
+      </p>
+      <div class="hero-cta">
+        <a class="btn big" href="/auth.html?mode=signup">🚀 Start Free</a>
+        <a class="btn big ghost" href="/app.html">Open Dashboard →</a>
+      </div>
+      <div class="hero-stats">
+        <div><b id="statSymbols">300+</b><span>F&O instruments</span></div>
+        <div><b>6</b><span>Scanner rooms</span></div>
+        <div><b>Greeks</b><span>Δ Γ Θ Vega</span></div>
       </div>
     </div>
-
-    <div class="controls">
-      <a class="btn ghost" href="/scanner.html">🛰️ Scanner</a>
-      <a class="btn ghost" href="/admin.html">⚙️ Admin</a>
-      <label class="ctrl">
-        <span>Symbol <span id="symCount" class="count"></span></span>
-        <div class="sym-wrap">
-          <input id="symSearch" type="text" autocomplete="off" spellcheck="false" placeholder="🔍 filter…" />
-          <select id="symbol"></select>
-        </div>
-      </label>
-      <label class="ctrl">
-        <span>Expiry</span>
-        <select id="expiry"></select>
-      </label>
-      <label class="ctrl toggle" title="Tick = use built-in simulator. Untick = try live NSE (works when self-hosted on your PC).">
-        <input type="checkbox" id="mock" />
-        <span>Mock</span>
-      </label>
-      <label class="ctrl toggle">
-        <input type="checkbox" id="auto" checked />
-        <span>Auto 5s</span>
-      </label>
-      <button id="refresh" class="btn">↻ Refresh</button>
-    </div>
+    <div class="scroll-hint">▼ scroll</div>
   </header>
 
-  <!-- Simulated-data warning (shown only when source = mock) -->
-  <div id="mockBanner" class="mock-banner" style="display:none">
-    ⚠️ <b>SIMULATED DATA</b> — ye real NSE prices nahi hain (Bharti/Nifty ke numbers approximate hain).
-    Real live data ke liye ise apne PC pe chalao (<code>node server.js</code>, Mock untick) ya broker feed lagao.
-    <a href="https://github.com/rahul007monu-cloud/nse-option-#-use-it-live-real-nse-data" target="_blank">How →</a>
-  </div>
-
-  <!-- Top summary strip -->
-  <section class="strip">
-    <div class="spot-box">
-      <span class="k"><span id="symName">NIFTY</span> <span id="typeBadge" class="badge"></span></span>
-      <span class="spot" id="spot">--</span>
-      <span class="src" id="source"></span>
-      <span class="market" id="marketBadge"></span>
-    </div>
-
-    <div class="momentum" id="momentumBox">
-      <div class="momentum-arrow" id="momArrow">→</div>
-      <div class="momentum-text">
-        <span class="mom-label" id="momLabel">Loading…</span>
-        <div class="mom-bar"><div class="mom-fill" id="momFill"></div></div>
-        <span class="mom-strength" id="momStrength"></span>
-      </div>
-    </div>
-
-    <div class="kpis">
-      <div class="kpi"><span class="k">PCR</span><b id="pcr">--</b></div>
-      <div class="kpi"><span class="k">Max Pain</span><b id="maxpain">--</b></div>
-      <div class="kpi"><span class="k">ATM</span><b id="atm">--</b></div>
-      <div class="kpi"><span class="k">Support</span><b id="support" class="up">--</b></div>
-      <div class="kpi"><span class="k">Resistance</span><b id="resistance" class="down">--</b></div>
-      <div class="kpi"><span class="k">Expiry (DTE)</span><b id="dte">--</b></div>
+  <!-- FEATURES -->
+  <section id="features" class="section">
+    <h2 class="sec-title">Everything a serious options trader needs</h2>
+    <div class="feature-grid">
+      <div class="feat-card"><div class="feat-ic">📊</div><h3>Live Option Chain</h3><p>OI, change-in-OI, IV, LTP with rise/fall flash. Support & resistance walls at a glance.</p></div>
+      <div class="feat-card"><div class="feat-ic">🧮</div><h3>Greeks & Theta</h3><p>Black-Scholes Delta, Gamma, per-day Theta and Vega for every strike.</p></div>
+      <div class="feat-card"><div class="feat-ic">📏</div><h3>DEMA Levels</h3><p>10/20/50/100/200 daily EMA as dynamic support & resistance with trend.</p></div>
+      <div class="feat-card"><div class="feat-ic">🎯</div><h3>Momentum Signal</h3><p>Put/Call writing flow + PCR + Max Pain → one clear Bullish/Bearish score.</p></div>
+      <div class="feat-card"><div class="feat-ic">🛰️</div><h3>Daily Scanner</h3><p>Rooms for At-Support, Bullish, Bearish, Golden Cross & Breakout — with SL/Target/R:R.</p></div>
+      <div class="feat-card"><div class="feat-ic">📲</div><h3>Installable App</h3><p>Add to home screen (PWA). Works on mobile & desktop, market-hours aware.</p></div>
     </div>
   </section>
 
-  <!-- Plain-language verdict -->
-  <section class="summary" id="summary">Analysing…</section>
-
-  <div class="grid">
-    <!-- Chart -->
-    <section class="card chart-card">
-      <div class="card-head">
-        <h2>Spot & Momentum Trend</h2>
-        <div class="legend">
-          <span class="lg spot-lg">Spot</span>
-          <span class="lg score-lg">Momentum score</span>
-        </div>
-      </div>
-      <canvas id="chart" height="260"></canvas>
-    </section>
-
-    <!-- Reasons -->
-    <section class="card reasons-card">
-      <div class="card-head"><h2>Why this signal?</h2></div>
-      <ul id="reasons" class="reasons"></ul>
-      <div class="mini-kpis">
-        <div><span class="k">CE OI chg</span><b id="ceChg" class="down">--</b></div>
-        <div><span class="k">PE OI chg</span><b id="peChg" class="up">--</b></div>
-        <div><span class="k">Intraday PCR</span><b id="pcrChg">--</b></div>
-      </div>
-    </section>
-  </div>
-
-  <!-- Daily EMA (DEMA) support/resistance -->
-  <section class="card levels-card" id="demaCard">
-    <div class="card-head">
-      <h2>Daily EMA Levels (DEMA) <small>— price ke neeche = support, upar = resistance</small></h2>
-      <span class="trend-badge" id="trendBadge">--</span>
-    </div>
-    <div class="dema-row" id="demaRow"></div>
+  <!-- PRICING -->
+  <section id="pricing" class="section">
+    <h2 class="sec-title">Simple pricing</h2>
+    <p class="sec-sub">Start free. Upgrade when you're ready.</p>
+    <div class="pricing-grid" id="pricingGrid">Loading plans…</div>
+    <p class="pricing-note">Payments coming soon — plans can be activated by admin. Not investment advice.</p>
   </section>
 
-  <!-- Option chain table -->
-  <section class="card table-card">
-    <div class="card-head">
-      <h2>Option Chain <small>(CALLS ⟵ Strike ⟶ PUTS)</small></h2>
-      <span class="updated" id="updated"></span>
-    </div>
-    <div class="table-wrap">
-      <table id="chain">
-        <thead>
-          <tr>
-            <th class="ce">OI</th>
-            <th class="ce">Chg OI</th>
-            <th class="ce">IV</th>
-            <th class="ce">Theta</th>
-            <th class="ce">LTP</th>
-            <th class="strike">STRIKE</th>
-            <th class="pe">LTP</th>
-            <th class="pe">Theta</th>
-            <th class="pe">IV</th>
-            <th class="pe">Chg OI</th>
-            <th class="pe">OI</th>
-            <th class="verdict">Signal</th>
-          </tr>
-        </thead>
-        <tbody id="chainBody"></tbody>
-        <tfoot>
-          <tr class="totals-row">
-            <td class="ce" id="tCeOI">--</td>
-            <td class="ce" id="tCeChg">--</td>
-            <td class="ce" colspan="3">Total CALL OI →</td>
-            <td class="strike">TOTAL</td>
-            <td class="pe" colspan="3">← Total PUT OI</td>
-            <td class="pe" id="tPeChg">--</td>
-            <td class="pe" id="tPeOI">--</td>
-            <td class="verdict" id="tVerdict">--</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-    <p class="disclaimer">
-      ⚠️ Educational tool. Mock data is a simulator; wire a broker/live feed for real trading.
-      Not investment advice.
-    </p>
-  </section>
+  <footer class="lfooter">
+    <div>📈 <b>OptionPulse</b> — educational analytics for NSE F&O. Not investment advice.</div>
+    <div class="lfooter-links"><a href="/app.html">Dashboard</a> · <a href="/scanner.html">Scanner</a> · <a href="/auth.html">Login</a></div>
+  </footer>
 
-  <script src="/app.js"></script>
+  <script src="/landing.js"></script>
 </body>
 </html>

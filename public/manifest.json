@@ -1,0 +1,24 @@
+{
+  "name": "OptionPulse — NSE Option Chain Intelligence",
+  "short_name": "OptionPulse",
+  "description": "Real-time NSE F&O option chain analytics, Greeks, DEMA levels, momentum & daily scanner.",
+  "start_url": "/app.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070a0f",
+  "theme_color": "#0e1117",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%230e1117'/%3E%3Ctext x='96' y='132' font-size='110' text-anchor='middle'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230e1117'/%3E%3Ctext x='256' y='352' font-size='300' text-anchor='middle'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -3,68 +3,111 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin — Broker / API Settings</title>
-  <link rel="stylesheet" href="/style.css" />
+  <title>OptionPulse — Admin Console</title>
+  <link rel="stylesheet" href="/admin.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚙️</text></svg>" />
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">⚙️</span>
-      <div>
-        <h1>Admin — API Settings</h1>
-        <span class="tagline">Apni broker API khud daalo & manage karo (Angel One SmartAPI)</span>
-      </div>
+<body class="admin">
+  <aside class="a-side">
+    <div class="a-brand"><span class="dot"></span> Admin Console</div>
+    <nav class="a-nav">
+      <button data-tab="dash" class="active">📊 Dashboard</button>
+      <button data-tab="users">👥 Users</button>
+      <button data-tab="plans">💳 Plans</button>
+      <button data-tab="api">🔌 API &amp; Data</button>
+    </nav>
+    <div class="a-side-foot">
+      <div id="whoami">—</div>
+      <a href="/app.html">← Back to app</a>
     </div>
-    <div class="controls">
-      <a class="btn ghost" href="/">← Option Chain</a>
-      <a class="btn ghost" href="/scanner.html">🛰️ Scanner</a>
+  </aside>
+
+  <main class="a-main">
+    <div id="lock" class="a-lock" style="display:none"></div>
+
+    <div id="wrap" style="display:none">
+      <!-- DASHBOARD -->
+      <section class="a-page active" id="page-dash">
+        <h1 class="a-h">Dashboard</h1>
+        <p class="a-sub">Overview of your platform.</p>
+        <div class="a-cards">
+          <div class="a-stat"><b id="cUsers">–</b><span>Users</span></div>
+          <div class="a-stat"><b id="cPlans">–</b><span>Plans</span></div>
+          <div class="a-stat"><b id="cBroker">–</b><span>Live data</span></div>
+          <div class="a-stat"><b id="cHost">–</b><span>Host</span></div>
+        </div>
+        <div class="a-card">
+          <h3>Security</h3>
+          <div id="secBox" style="line-height:1.7;font-size:13px"></div>
+        </div>
+      </section>
+
+      <!-- USERS -->
+      <section class="a-page" id="page-users">
+        <h1 class="a-h">Users &amp; Subscriptions</h1>
+        <p class="a-sub">Assign plans, set expiry, remove users.</p>
+        <div class="a-card">
+          <table class="a-tbl" id="usersTbl">
+            <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Plan</th><th>Days</th><th>Action</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PLANS -->
+      <section class="a-page" id="page-plans">
+        <h1 class="a-h">Plans</h1>
+        <p class="a-sub">Create / edit subscription plans (shown on the pricing page).</p>
+        <div class="a-card">
+          <h3>Existing plans</h3>
+          <table class="a-tbl" id="plansTbl">
+            <thead><tr><th>ID</th><th>Name</th><th>Price</th><th>Period</th><th>Features</th><th></th></tr></thead>
+            <tbody id="plansBody"></tbody>
+          </table>
+        </div>
+        <div class="a-card">
+          <h3>Add / update plan</h3>
+          <div class="a-fld"><span>ID (e.g. pro)</span><input id="pl_id" /></div>
+          <div class="a-fld"><span>Name</span><input id="pl_name" /></div>
+          <div class="a-fld"><span>Price (₹)</span><input id="pl_price" type="number" /></div>
+          <div class="a-fld"><span>Period (month / year / forever)</span><input id="pl_period" value="month" /></div>
+          <div class="a-fld"><span>Tagline</span><input id="pl_tag" /></div>
+          <div class="a-fld"><span>Features (comma: chain,greeks,dema,scanner,alerts,live)</span><input id="pl_features" /></div>
+          <div class="a-fld"><span>Highlights (one per line)</span><textarea id="pl_highlights" rows="3"></textarea></div>
+          <button class="a-btn" id="savePlan">💾 Save plan</button>
+          <div class="a-msg" id="planMsg"></div>
+        </div>
+      </section>
+
+      <!-- API & DATA -->
+      <section class="a-page" id="page-api">
+        <h1 class="a-h">API &amp; Data (Angel One)</h1>
+        <p class="a-sub">Broker credentials for real-time data. Kept secret &amp; masked.</p>
+        <div class="a-card">
+          <div class="a-fld"><span>🔑 Admin password (ADMIN_TOKEN, if set)</span><input id="adminToken" type="password" placeholder="localhost pe khali chalega" /></div>
+          <div class="a-fld"><span>API Key</span><input id="apiKey" autocomplete="off" /></div>
+          <div class="a-fld"><span>Client Code</span><input id="clientCode" autocomplete="off" /></div>
+          <div class="a-fld"><span>MPIN</span><input id="mpin" type="password" autocomplete="off" /></div>
+          <div class="a-fld"><span>TOTP Secret (base32)</span><input id="totpSecret" autocomplete="off" /></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+            <button class="a-btn" id="save">💾 Save</button>
+            <button class="a-btn ghost" id="test">🔌 Test</button>
+            <button class="a-btn danger" id="clear">🗑 Clear</button>
+          </div>
+          <div class="a-msg" id="msg"></div>
+        </div>
+        <div class="a-card">
+          <h3>Vercel — permanent (Environment Variables)</h3>
+          <pre class="a-envblock">SMARTAPI_KEY=...
+SMARTAPI_CLIENT=...
+SMARTAPI_PIN=...
+SMARTAPI_TOTP_SECRET=...
+ADMIN_TOKEN=&lt;admin password&gt;
+SESSION_SECRET=&lt;long random string&gt;</pre>
+        </div>
+      </section>
     </div>
-  </header>
-
-  <section class="admin-wrap">
-    <div class="card admin-card">
-      <div class="card-head"><h2>Status</h2><span id="statusBadge" class="badge">…</span></div>
-      <div id="statusBox" class="status-box">Loading…</div>
-    </div>
-
-    <div class="card admin-card">
-      <div class="card-head"><h2>Angel One SmartAPI credentials</h2></div>
-      <p class="hint">smartapi.angelone.in se: "Create an App" → API Key. + apna Client Code, MPIN, aur TOTP secret.</p>
-
-      <label class="fld"><span>🔑 Admin Password (login) <small>= aapka ADMIN_TOKEN</small></span>
-        <input id="adminToken" type="password" placeholder="Vercel pe zaroori; localhost pe khali chalega" autocomplete="off" /></label>
-
-      <label class="fld"><span>API Key</span><input id="apiKey" autocomplete="off" placeholder="e.g. AbCd1234" /></label>
-      <label class="fld"><span>Client Code (Angel ID)</span><input id="clientCode" autocomplete="off" placeholder="e.g. A123456" /></label>
-      <label class="fld"><span>MPIN</span><input id="mpin" type="password" autocomplete="off" placeholder="your Angel MPIN" /></label>
-      <label class="fld"><span>TOTP Secret <small>(base32, QR ke neeche wali lambi key)</small></span>
-        <input id="totpSecret" autocomplete="off" placeholder="e.g. JBSWY3DPEHPK3PXP" /></label>
-
-      <div class="admin-actions">
-        <button id="save" class="btn">💾 Save</button>
-        <button id="test" class="btn ghost">🔌 Test Connection</button>
-        <button id="clear" class="btn ghost danger">🗑 Clear</button>
-      </div>
-      <div id="msg" class="admin-msg"></div>
-    </div>
-
-    <div class="card admin-card">
-      <div class="card-head"><h2>Vercel (permanent) — Environment Variables</h2></div>
-      <p class="hint">
-        ⚠️ Vercel pe file-save <b>permanent nahi</b> rehta (serverless). Isliye Vercel pe
-        real data ke liye ye 4 variables <b>Project → Settings → Environment Variables</b> me daalo,
-        phir Redeploy karo:
-      </p>
-      <pre class="envblock">SMARTAPI_KEY=&lt;your api key&gt;
-SMARTAPI_CLIENT=&lt;your client code&gt;
-SMARTAPI_PIN=&lt;your mpin&gt;
-SMARTAPI_TOTP_SECRET=&lt;your totp secret&gt;
-ADMIN_TOKEN=&lt;koi bhi apna password&gt;</pre>
-      <p class="hint">Self-host (PC) pe: yahi form Save kar do — <code>data/credentials.json</code> me safe save ho jayega.</p>
-    </div>
-  </section>
-
+  </main>
   <script src="/admin.js"></script>
 </body>
 </html>

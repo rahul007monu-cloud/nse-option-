@@ -18,6 +18,8 @@ const nse = require('./nse');
 const { analyze } = require('./analysis');
 const { runScan } = require('./scanner');
 const cred = require('./credentials');
+const store = require('./store');
+const auth = require('./auth');
 const { loadBroker, reloadBroker, brokerStatus } = require('./brokers/loader');
 
 // Wire a broker adapter if configured (Angel One creds or BROKER_MODULE).
@@ -115,7 +117,70 @@ async function getAnalysis(q = {}) {
   return analyze(chain, { daily });
 }
 
+// ---- Auth --------------------------------------------------------------------
+function doSignup(body) {
+  const r = auth.signup(body || {});
+  if (!r.ok) return r;
+  return { ok: true, user: auth.publicUser(r.user), token: r.token };
+}
+function doLogin(body) {
+  const r = auth.login(body || {});
+  if (!r.ok) return r;
+  return { ok: true, user: auth.publicUser(r.user), token: r.token };
+}
+function meFromReq(req) {
+  const u = auth.currentUser(req);
+  return { user: auth.publicUser(u) };
+}
+
+// ---- Plans (public) ----------------------------------------------------------
+function getPublicPlans() {
+  return { plans: store.allPlans().filter((p) => p.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)) };
+}
+
+// ---- Platform admin (users / plans / subscriptions) --------------------------
+function isPlatformAdmin(req, token, host) {
+  const u = auth.currentUser(req);
+  if (u && u.role === 'admin') return true;
+  return adminAuthOK(token, host); // fallback: ADMIN_TOKEN / localhost
+}
+function adminListUsers() {
+  return { users: store.allUsers().map((u) => auth.publicUser(u)) };
+}
+function adminSetUserPlan(body) {
+  const { userId, planId, days } = body || {};
+  if (!store.findPlan(planId)) return { ok: false, error: 'Unknown plan' };
+  const expiry = days ? new Date(Date.now() + Number(days) * 86400000).toISOString() : null;
+  const u = store.updateUser(userId, { planId, planExpiry: expiry });
+  return u ? { ok: true, user: auth.publicUser(u) } : { ok: false, error: 'User not found' };
+}
+function adminDeleteUser(body) {
+  return { ok: store.deleteUser((body || {}).userId) };
+}
+function adminUpsertPlan(body) {
+  if (!body || !body.id || !body.name) return { ok: false, error: 'id and name required' };
+  const plan = {
+    id: String(body.id).toLowerCase(), name: body.name,
+    price: Number(body.price) || 0, currency: body.currency || 'INR',
+    period: body.period || 'month', tagline: body.tagline || '',
+    features: Array.isArray(body.features) ? body.features : String(body.features || '').split(',').map((s) => s.trim()).filter(Boolean),
+    highlights: Array.isArray(body.highlights) ? body.highlights : String(body.highlights || '').split('\n').map((s) => s.trim()).filter(Boolean),
+    active: body.active !== false, order: Number(body.order) || 99,
+  };
+  store.upsertPlan(plan);
+  return { ok: true, plan };
+}
+function adminDeletePlan(body) {
+  return { ok: store.deletePlan((body || {}).id) };
+}
+
 module.exports = {
   getHealth, getSymbols, getAnalysis, getScan,
   adminAuthOK, adminLockReason, getAdminStatus, saveAdminCreds, clearAdminCreds, testBroker,
+  // auth
+  doSignup, doLogin, meFromReq,
+  // plans
+  getPublicPlans,
+  // platform admin
+  isPlatformAdmin, adminListUsers, adminSetUserPlan, adminDeleteUser, adminUpsertPlan, adminDeletePlan,
 };

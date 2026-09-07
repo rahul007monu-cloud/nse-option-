@@ -23,6 +23,7 @@ const path = require('path');
 const { URL } = require('url');
 
 const service = require('./src/service');
+const auth = require('./src/auth');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -48,12 +49,12 @@ const MIME = {
   '.png': 'image/png',
 };
 
-function sendJSON(res, status, obj) {
-  res.writeHead(status, {
+function sendJSON(res, status, obj, extraHeaders) {
+  res.writeHead(status, Object.assign({
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
-  });
+  }, extraHeaders || {}));
   res.end(JSON.stringify(obj));
 }
 
@@ -92,23 +93,42 @@ const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = parsed.pathname;
   try {
-    // ---- Admin (credential management) ----
+    // ---- Auth ----
+    if (pathname === '/api/auth/signup' && req.method === 'POST') {
+      const r = service.doSignup(await readBody(req));
+      if (!r.ok) return sendJSON(res, 400, r);
+      return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
+    }
+    if (pathname === '/api/auth/login' && req.method === 'POST') {
+      const r = service.doLogin(await readBody(req));
+      if (!r.ok) return sendJSON(res, 401, r);
+      return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
+    }
+    if (pathname === '/api/auth/logout') {
+      return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
+    }
+    if (pathname === '/api/auth/me') {
+      return sendJSON(res, 200, service.meFromReq(req));
+    }
+    if (pathname === '/api/plans') {
+      return sendJSON(res, 200, service.getPublicPlans());
+    }
+
+    // ---- Admin (credentials + platform admin) ----
     if (pathname.startsWith('/api/admin')) {
       const token = req.headers['x-admin-token'] || parsed.searchParams.get('token') || '';
-      if (!service.adminAuthOK(token, req.headers.host)) {
+      if (!service.isPlatformAdmin(req, token, req.headers.host)) {
         return sendJSON(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
       }
-
       if (pathname === '/api/admin/status') return sendJSON(res, 200, service.getAdminStatus());
-      if (pathname === '/api/admin/save' && req.method === 'POST') {
-        return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
-      }
-      if (pathname === '/api/admin/clear' && req.method === 'POST') {
-        return sendJSON(res, 200, service.clearAdminCreds());
-      }
-      if (pathname === '/api/admin/test' && req.method === 'POST') {
-        return sendJSON(res, 200, await service.testBroker());
-      }
+      if (pathname === '/api/admin/save' && req.method === 'POST') return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
+      if (pathname === '/api/admin/clear' && req.method === 'POST') return sendJSON(res, 200, service.clearAdminCreds());
+      if (pathname === '/api/admin/test' && req.method === 'POST') return sendJSON(res, 200, await service.testBroker());
+      if (pathname === '/api/admin/users') return sendJSON(res, 200, service.adminListUsers());
+      if (pathname === '/api/admin/user-plan' && req.method === 'POST') return sendJSON(res, 200, service.adminSetUserPlan(await readBody(req)));
+      if (pathname === '/api/admin/user-delete' && req.method === 'POST') return sendJSON(res, 200, service.adminDeleteUser(await readBody(req)));
+      if (pathname === '/api/admin/plan-save' && req.method === 'POST') return sendJSON(res, 200, service.adminUpsertPlan(await readBody(req)));
+      if (pathname === '/api/admin/plan-delete' && req.method === 'POST') return sendJSON(res, 200, service.adminDeletePlan(await readBody(req)));
       return sendJSON(res, 404, { error: 'Unknown admin endpoint' });
     }
 

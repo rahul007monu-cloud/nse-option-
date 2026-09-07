@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scanner — NSE F&O Rooms</title>
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/landing.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0e1117" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛰️</text></svg>" />
+  <script src="/guard.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -17,9 +21,10 @@
       </div>
     </div>
     <div class="controls">
-      <a class="btn ghost" href="/">← Option Chain</a>
+      <a class="btn ghost" href="/app.html">← Dashboard</a>
       <label class="ctrl toggle"><input type="checkbox" id="mock" /><span>Mock</span></label>
       <button id="rescan" class="btn">↻ Rescan</button>
+      <span id="userChip"></span>
     </div>
   </header>
 

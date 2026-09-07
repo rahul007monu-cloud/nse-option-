@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OptionPulse — Login / Sign up</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/landing.css" />
+  <meta name="theme-color" content="#0e1117" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📈</text></svg>" />
+</head>
+<body class="landing auth-page">
+  <a class="auth-home" href="/">← OptionPulse</a>
+  <div class="auth-box">
+    <div class="auth-orb"><span class="logo-orb"></span></div>
+    <h1 id="authTitle">Welcome back</h1>
+    <p class="auth-sub" id="authSub">Login to your dashboard</p>
+
+    <div id="nameFld" class="fld" style="display:none"><span>Name</span><input id="name" autocomplete="name" placeholder="Your name" /></div>
+    <div class="fld"><span>Email</span><input id="email" type="email" autocomplete="email" placeholder="you@email.com" /></div>
+    <div class="fld"><span>Password</span><input id="password" type="password" autocomplete="current-password" placeholder="••••••" /></div>
+
+    <button id="submitBtn" class="btn big" style="width:100%">Login</button>
+    <div id="authMsg" class="auth-msg"></div>
+
+    <div class="auth-switch">
+      <span id="switchText">New here?</span>
+      <a href="#" id="switchLink">Create an account</a>
+    </div>
+  </div>
+  <script src="/auth-forms.js"></script>
+</body>
+</html>
