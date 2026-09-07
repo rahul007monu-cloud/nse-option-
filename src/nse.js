@@ -205,40 +205,30 @@ async function getDailyHistory(symbol, opts = {}) {
   return mockDailyHistory(symbol, cfg);
 }
 
-// ---- MOCK: option chain (evolving intraday state) --------------------------
-const mockState = {};
-const frozenChain = {}; // key -> stable chain snapshot used when market is closed
-
-function seededSpot(cfg, sym, marketOpen) {
-  if (!mockState[sym]) {
-    mockState[sym] = { spot: cfg.base, tick: 0, oi: {}, bias: (Math.random() - 0.5) * 0.6 };
-  }
-  const st = mockState[sym];
-  // When the market is closed, prices/OI must NOT move — return current state as-is.
-  if (!marketOpen) return st;
-  st.tick += 1;
-  st.bias += (Math.random() - 0.5) * 0.08;
-  st.bias = Math.max(-1, Math.min(1, st.bias * 0.98));
-  const drift = st.bias * cfg.step * 0.15;
-  const noise = (Math.random() - 0.5) * cfg.step * 0.6;
-  const revert = (cfg.base - st.spot) * 0.02;
-  st.spot += drift + noise + revert;
-  return st;
-}
+// ---- MOCK: DETERMINISTIC option chain --------------------------------------
+// Output is a pure function of (symbol, expiry, time). This is important on
+// serverless (Vercel), where every request is a fresh process: a RANDOM mock
+// would flip bullish/bearish on each refresh and jump prices around. Seeding
+// deterministically keeps every instance in agreement and, when the market is
+// closed, freezes the whole snapshot for the day.
+function rngFor(key) { return mulberry32(seedFrom(key)); }
 
 function buildMock(symbol, cfg, expiryDate, marketOpen) {
-  const key = symbol + '|' + formatExpiry(expiryDate);
-  // Market closed + we already built a snapshot -> return the SAME frozen data
-  // (deep clone) so every poll is identical (no blinking / drifting numbers).
-  if (!marketOpen && frozenChain[key]) {
-    return JSON.parse(JSON.stringify(frozenChain[key]));
-  }
-  const st = seededSpot(cfg, symbol, marketOpen);
-  const spot = st.spot;
+  const nowMs = Date.now();
+  // Time index in minutes: flows continuously while OPEN, frozen to the day
+  // (15:30) while CLOSED so numbers don't change after hours.
+  const tMin = marketOpen ? nowMs / 60000 : Math.floor(nowMs / 86400000) * 1440 + 930;
+
+  // Deterministic spot: a smooth multi-sine oscillation around the base price.
+  const rsp = rngFor(symbol + '|spot');
+  const p1 = rsp() * 6.283, p2 = rsp() * 6.283, p3 = rsp() * 6.283;
+  const osc = Math.sin(tMin / 37 + p1) + 0.5 * Math.sin(tMin / 13 + p2) + 0.25 * Math.sin(tMin / 5 + p3);
+  const spot = cfg.base + osc * cfg.step * 1.5;
+
   const atm = Math.round(spot / cfg.step) * cfg.step;
   const half = Math.floor(cfg.strikes / 2);
   const T = greeks.daysToYears(daysToExpiry(expiryDate));
-  const oiUnit = cfg.type === 'index' ? 1000 : 250; // stocks have smaller OI
+  const oiUnit = cfg.type === 'index' ? 1000 : 250;
 
   const rows = [];
   for (let i = -half; i <= half; i++) {
@@ -249,55 +239,53 @@ function buildMock(symbol, cfg, expiryDate, marketOpen) {
     const peBias = i < 0 ? 1.6 : i > 0 ? 0.5 : 1.0;
     const ceBias = i > 0 ? 1.6 : i < 0 ? 0.5 : 1.0;
 
-    if (!st.oi[strike]) {
-      st.oi[strike] = {
-        ceOI: Math.round(baseOI * ceBias * (0.8 + Math.random() * 0.4)),
-        peOI: Math.round(baseOI * peBias * (0.8 + Math.random() * 0.4)),
-      };
-    }
-    const prev = st.oi[strike];
-    const b = st.bias;
-    const ceChg = Math.round((Math.random() - 0.5 - b * 0.5) * baseOI * 0.06 * (i >= -1 ? 1.3 : 0.6));
-    const peChg = Math.round((Math.random() - 0.5 + b * 0.5) * baseOI * 0.06 * (i <= 1 ? 1.3 : 0.6));
-    prev.ceOI = Math.max(oiUnit * 0.5, prev.ceOI + ceChg);
-    prev.peOI = Math.max(oiUnit * 0.5, prev.peOI + peChg);
+    // Per-strike deterministic RNG -> fixed baselines + fixed phases.
+    const rk = rngFor(symbol + '|' + strike);
+    const ceBaseOI = Math.round(baseOI * ceBias * (0.8 + rk() * 0.4));
+    const peBaseOI = Math.round(baseOI * peBias * (0.8 + rk() * 0.4));
+    const ivJit = (rk() - 0.5) * 0.01;
+    const phC = rk() * 6.283, phP = rk() * 6.283;
+    const volC = 0.3 + rk() * 0.4, volP = 0.3 + rk() * 0.4;
+
+    // Intraday OI change = smooth deterministic function of time (frozen when closed).
+    const chgAmp = baseOI * 0.1;
+    const ceChg = Math.round(Math.sin(tMin / 23 + phC) * chgAmp * (i >= -1 ? 1.2 : 0.6));
+    const peChg = Math.round(Math.sin(tMin / 29 + phP) * chgAmp * (i <= 1 ? 1.2 : 0.6));
+    const ceOI = Math.max(oiUnit * 0.5, ceBaseOI + ceChg);
+    const peOI = Math.max(oiUnit * 0.5, peBaseOI + peChg);
 
     const skew = i < 0 ? 0.012 * dist : 0.008 * dist;
-    const ceIV = cfg.baseIV + skew + (Math.random() - 0.5) * 0.004;
-    const peIV = cfg.baseIV + skew + 0.004 + (Math.random() - 0.5) * 0.004;
+    const ceIV = Math.max(0.02, cfg.baseIV + skew + ivJit);
+    const peIV = Math.max(0.02, cfg.baseIV + skew + 0.004 + ivJit);
     const cePrice = greeks.bsPrice('CE', spot, strike, T, RISK_FREE, ceIV);
     const pePrice = greeks.bsPrice('PE', spot, strike, T, RISK_FREE, peIV);
-    const jitter = cfg.base * 0.0004;
 
     rows.push({
       strikePrice: strike,
       CE: {
-        openInterest: Math.round(prev.ceOI),
+        openInterest: Math.round(ceOI),
         changeinOpenInterest: ceChg,
-        totalTradedVolume: Math.round(prev.ceOI * (0.2 + Math.random() * 0.5)),
+        totalTradedVolume: Math.round(ceOI * volC),
         impliedVolatility: round(ceIV * 100, 2),
-        lastPrice: round(Math.max(0.05, cePrice + (Math.random() - 0.5) * jitter), 2),
+        lastPrice: round(Math.max(0.05, cePrice), 2),
       },
       PE: {
-        openInterest: Math.round(prev.peOI),
+        openInterest: Math.round(peOI),
         changeinOpenInterest: peChg,
-        totalTradedVolume: Math.round(prev.peOI * (0.2 + Math.random() * 0.5)),
+        totalTradedVolume: Math.round(peOI * volP),
         impliedVolatility: round(peIV * 100, 2),
-        lastPrice: round(Math.max(0.05, pePrice + (Math.random() - 0.5) * jitter), 2),
+        lastPrice: round(Math.max(0.05, pePrice), 2),
       },
     });
   }
 
-  const chain = {
+  return {
     source: 'mock', symbol, type: cfg.type,
     underlyingValue: round(spot, 2),
     timestamp: new Date().toISOString(),
     expiry: formatExpiry(expiryDate),
     rows,
   };
-  // Cache as the frozen EOD snapshot when the market is closed.
-  if (!marketOpen) frozenChain[key] = JSON.parse(JSON.stringify(chain));
-  return chain;
 }
 
 // ---- LIVE NSE --------------------------------------------------------------

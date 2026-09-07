@@ -319,3 +319,14 @@ tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
 .src-live { color: var(--up); }
 .src-broker { color: var(--accent); }
 .src-mock { color: #e0a341; }
+
+
+/* ---------- v5: simulated-data banner ---------- */
+.mock-banner {
+  margin: 0; padding: 10px 20px;
+  background: #3a2c12; color: #f0c674;
+  border-bottom: 1px solid #5a4620;
+  font-size: 13px; line-height: 1.5;
+}
+.mock-banner code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
+.mock-banner a { color: #ffd97a; font-weight: 700; }

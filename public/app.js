@@ -102,6 +102,7 @@ function render(d) {
   const srcEl = $('source');
   srcEl.textContent = srcMap[d.source] || d.source;
   srcEl.className = 'src src-' + d.source;
+  $('mockBanner').style.display = d.source === 'mock' ? '' : 'none';
 
   // momentum
   const m = d.momentum;
