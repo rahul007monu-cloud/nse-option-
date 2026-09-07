@@ -98,7 +98,10 @@ function render(d) {
   badge.textContent = d.type === 'index' ? 'INDEX' : 'STOCK';
   badge.className = 'badge ' + (d.type === 'index' ? 'badge-idx' : 'badge-stk');
   $('spot').textContent = fmt(d.underlyingValue);
-  $('source').textContent = 'source: ' + d.source;
+  const srcMap = { live: '🟢 LIVE NSE', broker: '🔵 BROKER', mock: '🟡 MOCK (simulated)' };
+  const srcEl = $('source');
+  srcEl.textContent = srcMap[d.source] || d.source;
+  srcEl.className = 'src src-' + d.source;
 
   // momentum
   const m = d.momentum;

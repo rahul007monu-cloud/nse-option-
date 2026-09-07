@@ -312,3 +312,10 @@ tfoot .totals-row td {
   bottom: 0;
 }
 tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
+
+
+/* ---------- v4: data source badge ---------- */
+.src { font-weight: 700; }
+.src-live { color: var(--up); }
+.src-broker { color: var(--accent); }
+.src-mock { color: #e0a341; }

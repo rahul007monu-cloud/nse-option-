@@ -40,6 +40,51 @@ PORT=8080 node server.js
 
 ---
 
+## 🟢 Use it LIVE (real NSE data)
+
+The app tries **live NSE** by default (untick the **Mock** box in the UI). Whether
+you actually get live data depends on **where you run it**:
+
+### Option A — Your own PC/laptop (easiest, free) ✅
+NSE allows normal residential IPs. Just run the server on your machine:
+
+```bash
+node server.js          # then open http://localhost:3000  (Mock box UNticked)
+```
+
+**Confirm it works (do this before market open):**
+
+```bash
+node scripts/live-check.js NIFTY
+# ✅ LIVE DATA OK  -> you're set
+# ⚠️ Fell back to MOCK -> your network/host is blocked (use Option B/C)
+```
+
+NSE indices/stocks trade **Mon–Fri, 09:15–15:30 IST**. Outside these hours the
+app shows a **MARKET CLOSED** badge and freezes the last snapshot.
+
+### Option B — Broker feed (real‑time from ANY host, incl. Vercel) ⭐
+Most reliable. Use your broker's API (Zerodha/Fyers/Upstox/Angel/Dhan):
+
+```bash
+cp brokers/example-adapter.js brokers/zerodha.js   # implement fetchChain()
+BROKER_MODULE=./brokers/zerodha.js node server.js
+```
+
+Keep API keys in env vars. See `brokers/example-adapter.js` for the exact shape.
+
+### Option C — Vercel
+Vercel's servers use datacenter IPs that **NSE blocks (HTTP 403)**, so direct live
+NSE won't work there — it falls back to mock. For real data on Vercel, use a
+**broker adapter (Option B)** with your token set as a Vercel Environment Variable,
+or set `PREFER_MOCK=1` to keep it on the simulator intentionally.
+
+> **Why not just "turn it on"?** There is no hosted key that gives free real‑time
+> NSE data from the cloud. Real data comes either from **your own IP** (Option A)
+> or **your authenticated broker** (Option B).
+
+---
+
 ## ▲ Deploy on Vercel
 
 This repo works on Vercel **without a build step**:

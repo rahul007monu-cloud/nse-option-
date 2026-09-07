@@ -21,6 +21,7 @@
  */
 
 const https = require('https');
+const zlib = require('zlib');
 const greeks = require('./greeks');
 const master = require('../data/symbols');
 
@@ -300,36 +301,89 @@ function buildMock(symbol, cfg, expiryDate, marketOpen) {
 }
 
 // ---- LIVE NSE --------------------------------------------------------------
-function httpsGet(url, headers, cookie) {
+// NSE serves gzip/brotli and requires a primed cookie jar obtained by first
+// visiting the site as a browser would. This client replicates that flow.
+const LIVE_TIMEOUT = Number(process.env.NSE_TIMEOUT_MS || 8000);
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+
+function httpsRequest(url, cookie) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://www.nseindia.com/option-chain',
-        ...(cookie ? { Cookie: cookie } : {}),
-        ...headers,
+    const u = new URL(url);
+    const req = https.get(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        headers: {
+          'User-Agent': UA,
+          Accept: 'application/json, text/plain, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          Referer: 'https://www.nseindia.com/option-chain',
+          Connection: 'keep-alive',
+          ...(cookie ? { Cookie: cookie } : {}),
+        },
+        timeout: LIVE_TIMEOUT,
       },
-      timeout: 7000,
-    }, (res) => {
-      let data = '';
-      res.on('data', (c) => (data += c));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
-    });
-    req.on('timeout', () => req.destroy(new Error('timeout')));
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          let buf = Buffer.concat(chunks);
+          const enc = (res.headers['content-encoding'] || '').toLowerCase();
+          try {
+            if (enc === 'gzip') buf = zlib.gunzipSync(buf);
+            else if (enc === 'deflate') buf = zlib.inflateSync(buf);
+            else if (enc === 'br') buf = zlib.brotliDecompressSync(buf);
+          } catch (_) { /* leave raw */ }
+          resolve({ status: res.statusCode, headers: res.headers, body: buf.toString('utf8') });
+        });
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('NSE timeout')));
     req.on('error', reject);
   });
 }
 
+function mergeCookies(jar, setCookie) {
+  (setCookie || []).forEach((c) => {
+    const pair = c.split(';')[0];
+    const eq = pair.indexOf('=');
+    if (eq > 0) jar[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+  });
+  return jar;
+}
+const cookieHeader = (jar) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
+
 async function fetchLiveNSE(symbol, cfg) {
-  const home = await httpsGet('https://www.nseindia.com/option-chain');
-  const cookie = (home.headers['set-cookie'] || []).map((c) => c.split(';')[0]).join('; ');
+  const jar = {};
+  // 1) prime cookies from the homepage, then the option-chain page
+  const r1 = await httpsRequest('https://www.nseindia.com/');
+  mergeCookies(jar, r1.headers['set-cookie']);
+  const r2 = await httpsRequest('https://www.nseindia.com/option-chain', cookieHeader(jar));
+  mergeCookies(jar, r2.headers['set-cookie']);
+
   const endpoint = cfg.type === 'index' ? 'option-chain-indices' : 'option-chain-equities';
   const apiUrl = `https://www.nseindia.com/api/${endpoint}?symbol=${encodeURIComponent(symbol)}`;
-  const resp = await httpsGet(apiUrl, {}, cookie);
+
+  // 2) call the JSON API; if the session is rejected, re-prime once and retry
+  let resp = await httpsRequest(apiUrl, cookieHeader(jar));
+  if (resp.status === 401 || resp.status === 403 || !resp.body) {
+    const r3 = await httpsRequest('https://www.nseindia.com/option-chain', cookieHeader(jar));
+    mergeCookies(jar, r3.headers['set-cookie']);
+    resp = await httpsRequest(apiUrl, cookieHeader(jar));
+  }
   if (resp.status !== 200) throw new Error(`NSE HTTP ${resp.status}`);
-  return normalizeNSE(symbol, cfg, JSON.parse(resp.body));
+
+  let json;
+  try {
+    json = JSON.parse(resp.body);
+  } catch (e) {
+    throw new Error('NSE response not JSON (blocked or rate-limited)');
+  }
+  const chain = normalizeNSE(symbol, cfg, json);
+  if (!chain.rows || !chain.rows.length) throw new Error('NSE returned empty chain');
+  return chain;
 }
 
 function normalizeNSE(symbol, cfg, json) {

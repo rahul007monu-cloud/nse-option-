@@ -16,6 +16,10 @@
 
 const nse = require('./nse');
 const { analyze } = require('./analysis');
+const { loadBroker } = require('./brokers/loader');
+
+// Wire a broker adapter if BROKER_MODULE is configured (real-time from any host).
+loadBroker();
 
 async function getHealth() {
   return {
@@ -37,7 +41,9 @@ function getSymbols() {
  */
 async function getAnalysis(q = {}) {
   const symbol = (q.symbol || 'NIFTY').toUpperCase();
-  const preferMock = !!q.mock;
+  // Force mock either per-request (?mock=1) or globally via env (useful on hosts
+  // like Vercel where NSE blocks the datacenter IP — set PREFER_MOCK=1 there).
+  const preferMock = !!q.mock || process.env.PREFER_MOCK === '1';
   const expiryIndex = Number.isFinite(q.expiryIndex) ? q.expiryIndex : 0;
 
   const [chain, daily] = await Promise.all([
