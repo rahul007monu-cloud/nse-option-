@@ -1,6 +1,6 @@
 {
   "name": "nse-option-analyzer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "LTP-Calculator style NSE Option Chain Analyzer — live/mock option-chain tracking with OI change, PCR, IV, Greeks (Theta), Max Pain, Support/Resistance and a momentum (up/down) signal. Zero external dependencies.",
   "main": "server.js",
   "type": "commonjs",
