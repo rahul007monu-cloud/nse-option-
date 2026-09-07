@@ -26,7 +26,9 @@ function send(res, status, obj) {
 module.exports = async (req, res) => {
   const q = query(req);
   const token = req.headers['x-admin-token'] || q.token || '';
-  if (!service.adminAuthOK(token)) return send(res, 401, { error: 'Unauthorized (admin token)' });
+  if (!service.adminAuthOK(token, req.headers.host)) {
+    return send(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
+  }
 
   // action from ?action= or trailing path segment
   const action = q.action || (req.url.split('?')[0].split('/').pop());

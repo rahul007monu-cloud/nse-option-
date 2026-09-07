@@ -7,7 +7,15 @@ const hdr = () => ({ 'Content-Type': 'application/json', 'x-admin-token': token(
 async function loadStatus() {
   try {
     const r = await fetch('/api/admin/status', { headers: { 'x-admin-token': token() } });
-    if (r.status === 401) { $('statusBox').textContent = 'Admin token galat/chahiye.'; return; }
+    if (r.status === 401) {
+      const j = await r.json().catch(() => ({}));
+      const badge = $('statusBadge');
+      badge.textContent = '🔒 LOCKED';
+      badge.className = 'badge badge-idx';
+      $('statusBox').innerHTML = `<b style="color:#e0a341">🔒 ${j.reason || 'Admin locked.'}</b><br>` +
+        `Password upar daal ke dobara try karo (field: Admin Password).`;
+      return;
+    }
     const s = await r.json();
     renderStatus(s);
   } catch (e) {
@@ -49,7 +57,7 @@ $('save').addEventListener('click', async () => {
       msg('✅ Saved' + (j.ephemeral ? ' (Vercel: temporary — use Env Vars for permanent!)' : '') + '. Ab "Test Connection" dabao.', true);
       loadStatus();
     } else {
-      msg('❌ ' + (j.error || 'Save failed'), false);
+      msg('❌ ' + (j.reason || j.error || 'Save failed'), false);
     }
   } catch (e) { msg('❌ ' + e.message, false); }
 });
@@ -60,7 +68,7 @@ $('test').addEventListener('click', async () => {
     const r = await fetch('/api/admin/test', { method: 'POST', headers: hdr() });
     const j = await r.json();
     if (j.ok) msg(`✅ LIVE OK! NIFTY spot ${j.spot}, ${j.strikes} strikes, expiry ${j.expiry}. Real data chालu hai!`, true);
-    else msg('❌ Test failed: ' + j.error, false);
+    else msg('❌ ' + (j.reason || j.error || 'Test failed'), false);
   } catch (e) { msg('❌ ' + e.message, false); }
 });
 
@@ -69,7 +77,7 @@ $('clear').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/admin/clear', { method: 'POST', headers: hdr() });
     const j = await r.json();
-    msg(j.ok ? '🗑 Cleared.' : '❌ ' + (j.error || 'failed'), j.ok);
+    msg(j.ok ? '🗑 Cleared.' : '❌ ' + (j.reason || j.error || 'failed'), j.ok);
     loadStatus();
   } catch (e) { msg('❌ ' + e.message, false); }
 });

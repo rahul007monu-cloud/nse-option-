@@ -24,9 +24,24 @@ const { loadBroker, reloadBroker, brokerStatus } = require('./brokers/loader');
 loadBroker();
 
 // ---- Admin (credential management) -----------------------------------------
-function adminAuthOK(token) {
+function isLocalHost(host) {
+  return /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(String(host || ''));
+}
+/**
+ * Secure-by-default admin gate:
+ *  - ADMIN_TOKEN set  -> must match (password login), from anywhere
+ *  - no token + localhost -> allowed (only reachable by you on your device)
+ *  - no token + public host -> LOCKED (prevents open admin on Vercel)
+ */
+function adminAuthOK(token, host) {
   const need = process.env.ADMIN_TOKEN;
-  return !need || token === need;
+  if (need) return token === need;
+  return isLocalHost(host);
+}
+function adminLockReason(host) {
+  if (process.env.ADMIN_TOKEN) return 'Galat ya missing password.';
+  if (!isLocalHost(host)) return 'Admin locked. Public URL pe admin chalane ke liye Vercel me ADMIN_TOKEN env var set karo (wahi password hoga), phir redeploy.';
+  return 'Locked.';
 }
 function getAdminStatus() {
   return { ...cred.getStatus(), broker: brokerStatus(), adminProtected: !!process.env.ADMIN_TOKEN };
@@ -102,5 +117,5 @@ async function getAnalysis(q = {}) {
 
 module.exports = {
   getHealth, getSymbols, getAnalysis, getScan,
-  adminAuthOK, getAdminStatus, saveAdminCreds, clearAdminCreds, testBroker,
+  adminAuthOK, adminLockReason, getAdminStatus, saveAdminCreds, clearAdminCreds, testBroker,
 };

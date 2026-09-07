@@ -95,7 +95,9 @@ const server = http.createServer(async (req, res) => {
     // ---- Admin (credential management) ----
     if (pathname.startsWith('/api/admin')) {
       const token = req.headers['x-admin-token'] || parsed.searchParams.get('token') || '';
-      if (!service.adminAuthOK(token)) return sendJSON(res, 401, { error: 'Unauthorized (admin token)' });
+      if (!service.adminAuthOK(token, req.headers.host)) {
+        return sendJSON(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
+      }
 
       if (pathname === '/api/admin/status') return sendJSON(res, 200, service.getAdminStatus());
       if (pathname === '/api/admin/save' && req.method === 'POST') {

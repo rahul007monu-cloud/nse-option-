@@ -98,8 +98,14 @@ app needed at runtime) and turns the live source on.
   Environment Variables (the panel shows the exact block), plus `ADMIN_TOKEN` to
   protect the panel.
 
-Endpoints: `GET /api/admin/status`, `POST /api/admin/save|test|clear`
-(protected by `x-admin-token` when `ADMIN_TOKEN` is set).
+**🔒 Security (secure by default):**
+- On **localhost** (your own device) the panel opens freely — only you can reach it.
+- On a **public URL (Vercel)** the admin is **LOCKED** until you set an `ADMIN_TOKEN`
+  env var. That token is your **login password** (send as `x-admin-token`). No token
+  on a public host = no admin access at all. Secrets are never returned in plaintext
+  (status is masked).
+
+Endpoints: `GET /api/admin/status`, `POST /api/admin/save|test|clear`.
 
 ---
 
