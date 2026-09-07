@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NSE Option Chain Analyzer — LTP Style</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📈</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📈</span>
+      <div>
+        <h1>Option Chain Analyzer</h1>
+        <span class="tagline">LTP-calculator style · OI · PCR · IV · Greeks · Momentum</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="ctrl">
+        <span>Symbol</span>
+        <select id="symbol"></select>
+      </label>
+      <label class="ctrl">
+        <span>Expiry</span>
+        <select id="expiry"></select>
+      </label>
+      <label class="ctrl toggle">
+        <input type="checkbox" id="mock" checked />
+        <span>Mock</span>
+      </label>
+      <label class="ctrl toggle">
+        <input type="checkbox" id="auto" checked />
+        <span>Auto 5s</span>
+      </label>
+      <button id="refresh" class="btn">↻ Refresh</button>
+    </div>
+  </header>
+
+  <!-- Top summary strip -->
+  <section class="strip">
+    <div class="spot-box">
+      <span class="k">Spot</span>
+      <span class="spot" id="spot">--</span>
+      <span class="src" id="source"></span>
+    </div>
+
+    <div class="momentum" id="momentumBox">
+      <div class="momentum-arrow" id="momArrow">→</div>
+      <div class="momentum-text">
+        <span class="mom-label" id="momLabel">Loading…</span>
+        <div class="mom-bar"><div class="mom-fill" id="momFill"></div></div>
+        <span class="mom-strength" id="momStrength"></span>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><span class="k">PCR</span><b id="pcr">--</b></div>
+      <div class="kpi"><span class="k">Max Pain</span><b id="maxpain">--</b></div>
+      <div class="kpi"><span class="k">ATM</span><b id="atm">--</b></div>
+      <div class="kpi"><span class="k">Support</span><b id="support" class="up">--</b></div>
+      <div class="kpi"><span class="k">Resistance</span><b id="resistance" class="down">--</b></div>
+      <div class="kpi"><span class="k">Expiry (DTE)</span><b id="dte">--</b></div>
+    </div>
+  </section>
+
+  <!-- Plain-language verdict -->
+  <section class="summary" id="summary">Analysing…</section>
+
+  <div class="grid">
+    <!-- Chart -->
+    <section class="card chart-card">
+      <div class="card-head">
+        <h2>Spot & Momentum Trend</h2>
+        <div class="legend">
+          <span class="lg spot-lg">Spot</span>
+          <span class="lg score-lg">Momentum score</span>
+        </div>
+      </div>
+      <canvas id="chart" height="260"></canvas>
+    </section>
+
+    <!-- Reasons -->
+    <section class="card reasons-card">
+      <div class="card-head"><h2>Why this signal?</h2></div>
+      <ul id="reasons" class="reasons"></ul>
+      <div class="mini-kpis">
+        <div><span class="k">CE OI chg</span><b id="ceChg" class="down">--</b></div>
+        <div><span class="k">PE OI chg</span><b id="peChg" class="up">--</b></div>
+        <div><span class="k">Intraday PCR</span><b id="pcrChg">--</b></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Option chain table -->
+  <section class="card table-card">
+    <div class="card-head">
+      <h2>Option Chain <small>(CALLS ⟵ Strike ⟶ PUTS)</small></h2>
+      <span class="updated" id="updated"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="chain">
+        <thead>
+          <tr>
+            <th class="ce">OI</th>
+            <th class="ce">Chg OI</th>
+            <th class="ce">IV</th>
+            <th class="ce">Theta</th>
+            <th class="ce">LTP</th>
+            <th class="strike">STRIKE</th>
+            <th class="pe">LTP</th>
+            <th class="pe">Theta</th>
+            <th class="pe">IV</th>
+            <th class="pe">Chg OI</th>
+            <th class="pe">OI</th>
+            <th class="verdict">Signal</th>
+          </tr>
+        </thead>
+        <tbody id="chainBody"></tbody>
+      </table>
+    </div>
+    <p class="disclaimer">
+      ⚠️ Educational tool. Mock data is a simulator; wire a broker/live feed for real trading.
+      Not investment advice.
+    </p>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>
