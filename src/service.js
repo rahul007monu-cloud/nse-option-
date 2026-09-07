@@ -17,10 +17,41 @@
 const nse = require('./nse');
 const { analyze } = require('./analysis');
 const { runScan } = require('./scanner');
-const { loadBroker } = require('./brokers/loader');
+const cred = require('./credentials');
+const { loadBroker, reloadBroker, brokerStatus } = require('./brokers/loader');
 
-// Wire a broker adapter if BROKER_MODULE is configured (real-time from any host).
+// Wire a broker adapter if configured (Angel One creds or BROKER_MODULE).
 loadBroker();
+
+// ---- Admin (credential management) -----------------------------------------
+function adminAuthOK(token) {
+  const need = process.env.ADMIN_TOKEN;
+  return !need || token === need;
+}
+function getAdminStatus() {
+  return { ...cred.getStatus(), broker: brokerStatus(), adminProtected: !!process.env.ADMIN_TOKEN };
+}
+function saveAdminCreds(body) {
+  const r = cred.saveCredentials(body || {});
+  if (r.ok) { try { reloadBroker(); } catch (_) {} }
+  return r;
+}
+function clearAdminCreds() {
+  const r = cred.clearCredentials();
+  try { reloadBroker(); } catch (_) {}
+  return r;
+}
+async function testBroker() {
+  try {
+    if (!cred.getCredentials()) return { ok: false, error: 'Credentials not configured yet' };
+    reloadBroker();
+    const angel = require('../brokers/angelone.js');
+    const chain = await angel.fetchChain('NIFTY');
+    return { ok: true, source: chain.source, spot: chain.underlyingValue, strikes: chain.rows.length, expiry: chain.expiry };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message) };
+  }
+}
 
 // ---- Scanner with a short TTL cache (scanning ~300 symbols is not free) -----
 let scanCache = { at: 0, data: null, key: '' };
@@ -69,4 +100,7 @@ async function getAnalysis(q = {}) {
   return analyze(chain, { daily });
 }
 
-module.exports = { getHealth, getSymbols, getAnalysis, getScan };
+module.exports = {
+  getHealth, getSymbols, getAnalysis, getScan,
+  adminAuthOK, getAdminStatus, saveAdminCreds, clearAdminCreds, testBroker,
+};

@@ -79,10 +79,37 @@ function serveStatic(res, urlPath) {
   });
 }
 
+function readBody(req) {
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch (_) { resolve({}); } });
+    req.on('error', () => resolve({}));
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = parsed.pathname;
   try {
+    // ---- Admin (credential management) ----
+    if (pathname.startsWith('/api/admin')) {
+      const token = req.headers['x-admin-token'] || parsed.searchParams.get('token') || '';
+      if (!service.adminAuthOK(token)) return sendJSON(res, 401, { error: 'Unauthorized (admin token)' });
+
+      if (pathname === '/api/admin/status') return sendJSON(res, 200, service.getAdminStatus());
+      if (pathname === '/api/admin/save' && req.method === 'POST') {
+        return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
+      }
+      if (pathname === '/api/admin/clear' && req.method === 'POST') {
+        return sendJSON(res, 200, service.clearAdminCreds());
+      }
+      if (pathname === '/api/admin/test' && req.method === 'POST') {
+        return sendJSON(res, 200, await service.testBroker());
+      }
+      return sendJSON(res, 404, { error: 'Unknown admin endpoint' });
+    }
+
     if (pathname === '/api/health') {
       return sendJSON(res, 200, await service.getHealth());
     }

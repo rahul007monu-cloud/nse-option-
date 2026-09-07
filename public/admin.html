@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Broker / API Settings</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚙️</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⚙️</span>
+      <div>
+        <h1>Admin — API Settings</h1>
+        <span class="tagline">Apni broker API khud daalo & manage karo (Angel One SmartAPI)</span>
+      </div>
+    </div>
+    <div class="controls">
+      <a class="btn ghost" href="/">← Option Chain</a>
+      <a class="btn ghost" href="/scanner.html">🛰️ Scanner</a>
+    </div>
+  </header>
+
+  <section class="admin-wrap">
+    <div class="card admin-card">
+      <div class="card-head"><h2>Status</h2><span id="statusBadge" class="badge">…</span></div>
+      <div id="statusBox" class="status-box">Loading…</div>
+    </div>
+
+    <div class="card admin-card">
+      <div class="card-head"><h2>Angel One SmartAPI credentials</h2></div>
+      <p class="hint">smartapi.angelone.in se: "Create an App" → API Key. + apna Client Code, MPIN, aur TOTP secret.</p>
+
+      <label class="fld"><span>Admin token <small>(agar ADMIN_TOKEN set kiya ho)</small></span>
+        <input id="adminToken" type="password" placeholder="optional" autocomplete="off" /></label>
+
+      <label class="fld"><span>API Key</span><input id="apiKey" autocomplete="off" placeholder="e.g. AbCd1234" /></label>
+      <label class="fld"><span>Client Code (Angel ID)</span><input id="clientCode" autocomplete="off" placeholder="e.g. A123456" /></label>
+      <label class="fld"><span>MPIN</span><input id="mpin" type="password" autocomplete="off" placeholder="your Angel MPIN" /></label>
+      <label class="fld"><span>TOTP Secret <small>(base32, QR ke neeche wali lambi key)</small></span>
+        <input id="totpSecret" autocomplete="off" placeholder="e.g. JBSWY3DPEHPK3PXP" /></label>
+
+      <div class="admin-actions">
+        <button id="save" class="btn">💾 Save</button>
+        <button id="test" class="btn ghost">🔌 Test Connection</button>
+        <button id="clear" class="btn ghost danger">🗑 Clear</button>
+      </div>
+      <div id="msg" class="admin-msg"></div>
+    </div>
+
+    <div class="card admin-card">
+      <div class="card-head"><h2>Vercel (permanent) — Environment Variables</h2></div>
+      <p class="hint">
+        ⚠️ Vercel pe file-save <b>permanent nahi</b> rehta (serverless). Isliye Vercel pe
+        real data ke liye ye 4 variables <b>Project → Settings → Environment Variables</b> me daalo,
+        phir Redeploy karo:
+      </p>
+      <pre class="envblock">SMARTAPI_KEY=&lt;your api key&gt;
+SMARTAPI_CLIENT=&lt;your client code&gt;
+SMARTAPI_PIN=&lt;your mpin&gt;
+SMARTAPI_TOTP_SECRET=&lt;your totp secret&gt;
+ADMIN_TOKEN=&lt;koi bhi apna password&gt;</pre>
+      <p class="hint">Self-host (PC) pe: yahi form Save kar do — <code>data/credentials.json</code> me safe save ho jayega.</p>
+    </div>
+  </section>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

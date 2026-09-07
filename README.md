@@ -85,6 +85,24 @@ or set `PREFER_MOCK=1` to keep it on the simulator intentionally.
 
 ---
 
+## ⚙️ Admin panel (enter your API keys)
+
+Open **`/admin.html`**. Enter your Angel One SmartAPI credentials — **API Key,
+Client Code, MPIN, TOTP Secret** — and hit **Save**, then **Test Connection**.
+The server auto-generates the TOTP from your secret (no SMS / no authenticator
+app needed at runtime) and turns the live source on.
+
+- **Self-host (PC):** saved to `data/credentials.json` (gitignored) — persists.
+- **Vercel:** file save is **temporary** (serverless). For permanent live data set
+  `SMARTAPI_KEY / SMARTAPI_CLIENT / SMARTAPI_PIN / SMARTAPI_TOTP_SECRET` as
+  Environment Variables (the panel shows the exact block), plus `ADMIN_TOKEN` to
+  protect the panel.
+
+Endpoints: `GET /api/admin/status`, `POST /api/admin/save|test|clear`
+(protected by `x-admin-token` when `ADMIN_TOKEN` is set).
+
+---
+
 ## 🛰️ Scanner (daily rooms)
 
 Open **`/scanner.html`** (or the "Scanner" button on the main page). It scans the

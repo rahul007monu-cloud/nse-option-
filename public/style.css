@@ -350,3 +350,24 @@ tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
 .symlink { color: var(--accent); text-decoration: none; font-weight: 700; }
 .symlink:hover { text-decoration: underline; }
 .muted { color: var(--muted); }
+
+
+/* ---------- v7: admin panel ---------- */
+.admin-wrap { max-width: 720px; margin: 16px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
+.admin-card { }
+.status-box { line-height: 1.7; font-size: 13px; color: var(--text); }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.fld { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-size: 13px; }
+.fld span { color: var(--muted); }
+.fld small { color: #667; }
+.fld input {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; font-size: 14px;
+}
+.admin-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.btn.danger { color: var(--down); border-color: var(--down); }
+.admin-msg { margin-top: 12px; font-size: 13px; min-height: 18px; }
+.envblock {
+  background: #0b0e13; border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; font-size: 12px; color: #9fe0b0; overflow-x: auto; white-space: pre;
+}

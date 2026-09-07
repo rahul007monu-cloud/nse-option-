@@ -1,41 +1,61 @@
 'use strict';
 
 /**
- * loader.js — optionally load a broker/data-vendor adapter at startup.
+ * loader.js — wire a broker adapter into the data layer.
  *
- * Set the BROKER_MODULE env var to the path of a module that exports:
- *   - fetchChain(symbol, expiry) -> normalised option-chain object
- *   - fetchDaily(symbol)         -> array of daily close prices (optional)
+ * Priority:
+ *   1. BROKER_MODULE env  -> load that custom adapter
+ *   2. Angel One creds set (env or Admin panel) -> load brokers/angelone.js
  *
- * Example:
- *   BROKER_MODULE=./brokers/zerodha.js node server.js
- *
- * This is the reliable way to get real-time data from ANY host (including
- * Vercel), because it uses YOUR authenticated broker session, not NSE's
- * public site (which blocks datacenter IPs).
+ * reloadBroker() is called after the Admin panel saves credentials, so the
+ * live source turns on without a restart.
  */
 
 const path = require('path');
 const nse = require('../nse');
+const { getCredentials } = require('../credentials');
 
-let loaded = false;
+let state = { loaded: false, name: null };
 
-function loadBroker() {
-  if (loaded) return true;
-  const mod = process.env.BROKER_MODULE;
-  if (!mod) return false;
-  try {
-    const resolved = path.isAbsolute(mod) ? mod : path.join(process.cwd(), mod);
-    const adapter = require(resolved);
-    if (typeof adapter.fetchChain === 'function') nse.setBrokerFetcher(adapter.fetchChain);
-    if (typeof adapter.fetchDaily === 'function') nse.setHistoryFetcher(adapter.fetchDaily);
-    loaded = true;
-    console.log(`[broker] adapter loaded: ${mod}`);
-    return true;
-  } catch (e) {
-    console.warn(`[broker] failed to load "${mod}": ${e.message}`);
-    return false;
-  }
+function register(adapter, name) {
+  if (adapter && typeof adapter.fetchChain === 'function') nse.setBrokerFetcher(adapter.fetchChain);
+  if (adapter && typeof adapter.fetchDaily === 'function') nse.setHistoryFetcher(adapter.fetchDaily);
+  state = { loaded: true, name };
 }
 
-module.exports = { loadBroker };
+function loadBroker() {
+  // 1) explicit custom module
+  const mod = process.env.BROKER_MODULE;
+  if (mod) {
+    try {
+      const resolved = path.isAbsolute(mod) ? mod : path.join(process.cwd(), mod);
+      register(require(resolved), mod);
+      console.log(`[broker] adapter loaded: ${mod}`);
+      return state;
+    } catch (e) {
+      console.warn(`[broker] failed to load "${mod}": ${e.message}`);
+    }
+  }
+  // 2) Angel One if credentials are configured
+  if (getCredentials()) {
+    try {
+      register(require('../../brokers/angelone.js'), 'angelone');
+      console.log('[broker] Angel One SmartAPI adapter active');
+      return state;
+    } catch (e) {
+      console.warn('[broker] Angel adapter load failed: ' + e.message);
+    }
+  }
+  return state;
+}
+
+function reloadBroker() {
+  state = { loaded: false, name: null };
+  nse.setBrokerFetcher(null);
+  nse.setHistoryFetcher(null);
+  return loadBroker();
+}
+
+function brokerStatus() { return state; }
+
+module.exports = { loadBroker, reloadBroker, brokerStatus };
