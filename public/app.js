@@ -17,6 +17,28 @@ const signed = (n) => (n > 0 ? '+' : '') + fmtK(n);
 
 let timer = null;
 
+// Chart history is accumulated in the browser (works on serverless/Vercel where
+// the server keeps no state). Per-symbol so switching symbols keeps each series.
+const HISTORY_MAX = 240;
+const clientHistory = {};
+function recordHistory(d) {
+  const key = d.symbol;
+  if (!clientHistory[key]) clientHistory[key] = [];
+  const arr = clientHistory[key];
+  const last = arr[arr.length - 1];
+  if (!last || last.t !== d.timestamp) {
+    arr.push({
+      t: d.timestamp,
+      spot: d.underlyingValue,
+      pcr: d.pcr,
+      score: d.momentum.score,
+      dir: d.momentum.dir,
+    });
+  }
+  if (arr.length > HISTORY_MAX) arr.splice(0, arr.length - HISTORY_MAX);
+  return arr;
+}
+
 // ---- bootstrap symbols -----------------------------------------------------
 const validSymbols = new Map(); // symbol -> type
 
@@ -103,8 +125,9 @@ function render(d) {
   // table
   renderTable(d);
 
-  // chart
-  drawChart(d.history || []);
+  // chart (history accumulated client-side; server value used if present)
+  const series = recordHistory(d);
+  drawChart(series.length > 1 ? series : d.history || series);
 
   // updated
   $('updated').textContent = 'Updated ' + new Date(d.timestamp).toLocaleTimeString('en-IN');

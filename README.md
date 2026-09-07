@@ -40,6 +40,39 @@ PORT=8080 node server.js
 
 ---
 
+## ▲ Deploy on Vercel
+
+This repo works on Vercel **without a build step**:
+
+- `public/` is served as static (the UI) at the root.
+- `api/*.js` run as serverless functions (`/api/health`, `/api/symbols`, `/api/analysis`).
+- `server.js` is only for local / self-hosted runs — Vercel ignores it.
+
+**Recommended Vercel project settings** (Project → Settings → Build & Development):
+
+| Setting | Value |
+|---|---|
+| Framework Preset | **Other** |
+| Build Command | *(leave empty / Override OFF)* |
+| Output Directory | *(leave empty / Override OFF)* |
+| Root Directory | repo root (`./`) |
+| Install Command | *(default)* |
+
+Then just **Deploy**. `vercel.json` already handles routing (`/` → `index.html`) and API headers.
+
+> **Why the page was blank before:** `server.js` is a long‑running Node HTTP
+> server, but Vercel is **serverless** — it never runs `node server.js`. The API
+> now lives in `api/*.js` (serverless) and the UI is static in `public/`, which
+> is the shape Vercel expects. The chart history is accumulated in the browser
+> (serverless instances keep no state).
+
+> **Live data note:** Vercel's servers cannot reach `nseindia.com` reliably
+> (datacenter IPs get blocked), so on Vercel the app runs on the **mock**
+> simulator by default. For real‑time data, wire a broker feed via
+> `setBrokerFetcher()` / `setHistoryFetcher()` (see below) or self‑host `server.js`.
+
+---
+
 ## 🔌 API
 
 | Endpoint | Description |
