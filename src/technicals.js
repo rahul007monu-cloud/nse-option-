@@ -99,10 +99,65 @@ function classifyTrend(levels, spot) {
   return { label: 'Sideways', dir: 'flat', score: 0, note: '' };
 }
 
+/**
+ * Full EMA series (same length as input). series[i] = EMA up to index i.
+ */
+function emaSeries(values, period) {
+  if (!values || !values.length) return [];
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = values[0];
+  for (let i = 0; i < values.length; i++) {
+    prev = i === 0 ? values[0] : values[i] * k + prev * (1 - k);
+    out.push(prev);
+  }
+  return out;
+}
+
+/**
+ * Golden / Death cross detection on daily closes.
+ * Golden = fast EMA crosses ABOVE slow EMA; Death = crosses BELOW.
+ * Returns { type:'golden'|'death'|null, agoDays, fast, slow }.
+ */
+function detectCross(closes, fastP = 50, slowP = 200, lookback = 12) {
+  if (!closes || closes.length < slowP + 2) return { type: null, agoDays: null };
+  const f = emaSeries(closes, fastP);
+  const s = emaSeries(closes, slowP);
+  const n = closes.length;
+  for (let back = 1; back <= lookback; back++) {
+    const i = n - 1 - back + 1; // today going backwards
+    const cur = i, prev = i - 1;
+    if (prev < 1) break;
+    const wasBelow = f[prev] <= s[prev];
+    const wasAbove = f[prev] >= s[prev];
+    if (wasBelow && f[cur] > s[cur]) return { type: 'golden', agoDays: n - 1 - cur, fast: round(f[n - 1], 2), slow: round(s[n - 1], 2) };
+    if (wasAbove && f[cur] < s[cur]) return { type: 'death', agoDays: n - 1 - cur, fast: round(f[n - 1], 2), slow: round(s[n - 1], 2) };
+  }
+  return { type: null, agoDays: null, fast: round(f[n - 1], 2), slow: round(s[n - 1], 2) };
+}
+
+/**
+ * Breakout detection: is spot breaking above the last `lookback` days' high
+ * (up breakout) or below the low (breakdown)? Uses closes as proxy for range.
+ * Returns { up, down, level, lowLevel }.
+ */
+function detectBreakout(closes, spot, lookback = 20) {
+  if (!closes || closes.length < lookback + 1) return { up: false, down: false };
+  const window = closes.slice(-lookback - 1, -1); // exclude today
+  const hi = Math.max(...window);
+  const lo = Math.min(...window);
+  return {
+    up: spot > hi,
+    down: spot < lo,
+    level: round(hi, 2),
+    lowLevel: round(lo, 2),
+  };
+}
+
 function round(x, n) {
   if (x == null || isNaN(x)) return null;
   const f = Math.pow(10, n);
   return Math.round(x * f) / f;
 }
 
-module.exports = { ema, movingAverages, classifyTrend, MA_PERIODS };
+module.exports = { ema, emaSeries, movingAverages, classifyTrend, detectCross, detectBreakout, MA_PERIODS };

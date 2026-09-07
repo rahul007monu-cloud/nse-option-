@@ -439,6 +439,15 @@ window.addEventListener('resize', () => drawChart(lastSeries));
 
 (async function init() {
   await loadSymbols();
+  // allow deep-link from the scanner: /?symbol=RELIANCE
+  try {
+    const qp = new URLSearchParams(location.search).get('symbol');
+    if (qp) {
+      const up = qp.toUpperCase();
+      buildSelect('');
+      if ([...$('symbol').options].some((o) => o.value === up)) $('symbol').value = up;
+    }
+  } catch (_) {}
   await refresh();
   setupTimer();
 })();

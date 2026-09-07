@@ -85,6 +85,26 @@ or set `PREFER_MOCK=1` to keep it on the simulator intentionally.
 
 ---
 
+## 🛰️ Scanner (daily rooms)
+
+Open **`/scanner.html`** (or the "Scanner" button on the main page). It scans the
+whole F&O universe and sorts instruments into rooms, each with **SL / Target /
+R:R** and a heuristic **possibility %**:
+
+- 🟢 **At Support / Bounce** — price on a support DEMA / option support, bullish setup
+- 📏 **On 20 DEMA** — price hugging the 20‑day EMA
+- 📈 **Bullish** / 📉 **Bearish** — strong momentum either way
+- ✨ **Golden Cross** — 50/200 (or 20/50) EMA crossover recently
+- 🚀 **Breakout** — price clearing the 20‑day range (momentum‑confirmed)
+
+`GET /api/scan?mock=1` returns the raw scan. Results are cached ~60s.
+
+> This is a transparent **rule‑based** engine (OI + momentum + DEMA + crossover +
+> breakout), not a self‑learning AI. SL/TP come from real technical levels; the
+> possibility % is a confidence heuristic, **not a guaranteed probability**.
+
+---
+
 ## ▲ Deploy on Vercel
 
 This repo works on Vercel **without a build step**:

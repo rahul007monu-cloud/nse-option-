@@ -89,6 +89,11 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/symbols') {
       return sendJSON(res, 200, service.getSymbols());
     }
+    if (pathname === '/api/scan') {
+      const result = await service.getScan({ mock: parsed.searchParams.get('mock') === '1' });
+      return sendJSON(res, 200, result);
+    }
+
     if (pathname === '/api/analysis') {
       const result = await service.getAnalysis({
         symbol: parsed.searchParams.get('symbol') || 'NIFTY',

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scanner — NSE F&O Rooms</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛰️</text></svg>" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🛰️</span>
+      <div>
+        <h1>F&O Scanner</h1>
+        <span class="tagline">Roz ka scan · Support/20-DEMA · Bullish · Bearish · Golden Cross · Breakout · SL/TP</span>
+      </div>
+    </div>
+    <div class="controls">
+      <a class="btn ghost" href="/">← Option Chain</a>
+      <label class="ctrl toggle"><input type="checkbox" id="mock" /><span>Mock</span></label>
+      <button id="rescan" class="btn">↻ Rescan</button>
+    </div>
+  </header>
+
+  <div id="mockBanner" class="mock-banner" style="display:none">
+    ⚠️ <b>SIMULATED DATA</b> — ye demo scan hai (real prices nahi). Real data ke liye PC pe live ya broker feed.
+  </div>
+
+  <section class="scan-meta" id="scanMeta">Scanning…</section>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <section class="card table-card">
+    <div class="table-wrap">
+      <table id="roomTable">
+        <thead>
+          <tr>
+            <th class="strike">Symbol</th>
+            <th>Type</th>
+            <th>LTP</th>
+            <th>Bias</th>
+            <th>Entry</th>
+            <th>SL</th>
+            <th>Target</th>
+            <th>R:R</th>
+            <th>Possibility</th>
+            <th>Score</th>
+            <th class="verdict">Note</th>
+          </tr>
+        </thead>
+        <tbody id="roomBody"></tbody>
+      </table>
+    </div>
+    <p class="disclaimer">
+      ⚠️ Rule-based scan (OI + momentum + DEMA + crossover + breakout). SL/TP from
+      technical levels. Possibility% is a heuristic, NOT a guarantee. Not investment advice.
+    </p>
+  </section>
+
+  <script src="/scanner.js"></script>
+</body>
+</html>

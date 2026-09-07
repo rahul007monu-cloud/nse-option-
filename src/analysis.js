@@ -214,6 +214,8 @@ function analyze(chain, opts = {}) {
   const signal = scoreToSignal(score);
   const strength = Math.round(Math.abs(score)); // 0..100
 
+  const tradeLevels = computeTradeLevels(spot, signal.dir, ma, support, resistance);
+
   const summary = buildSummary({
     symbol: chain.symbol,
     spot,
@@ -252,6 +254,7 @@ function analyze(chain, opts = {}) {
     movingAverages: ma
       ? { levels: ma.levels, supports: ma.supports, resistances: ma.resistances, trend: ma.trend }
       : null,
+    tradeLevels,
     momentum: {
       key: signal.key,
       label: signal.label,
@@ -301,6 +304,52 @@ function strikeVerdict(ceChg, peChg) {
   if (ratio > 0.15) return { label: 'Mild support', dir: 'up', color: '#7bd88f' };
   if (ratio < -0.15) return { label: 'Mild resistance', dir: 'down', color: '#f0a58a' };
   return { label: 'Neutral', dir: 'flat', color: '#9aa4b2' };
+}
+
+/**
+ * Smart SL / TP levels from real technical structure.
+ * - Bullish bias: SL just below the nearest support (DEMA / option), TP at the
+ *   nearest resistance above. Bearish: mirror image. If structure is missing,
+ *   fall back to sensible % based levels.
+ * Returns { bias, entry, sl, tp, rr, basis }.
+ */
+function computeTradeLevels(spot, dir, ma, support, resistance) {
+  const buf = spot * 0.003; // 0.3% buffer beyond the level
+  const levelsBelow = [];
+  const levelsAbove = [];
+
+  if (ma && ma.levels) {
+    for (const l of ma.levels) {
+      if (l.value == null) continue;
+      if (l.value < spot) levelsBelow.push({ v: l.value, from: l.name });
+      else if (l.value > spot) levelsAbove.push({ v: l.value, from: l.name });
+    }
+  }
+  (support || []).forEach((s) => { if (s.strike < spot) levelsBelow.push({ v: s.strike, from: 'Put OI ' + s.strike }); });
+  (resistance || []).forEach((r) => { if (r.strike > spot) levelsAbove.push({ v: r.strike, from: 'Call OI ' + r.strike }); });
+
+  const nearestBelow = levelsBelow.sort((a, b) => b.v - a.v)[0]; // just under spot
+  const nearestAbove = levelsAbove.sort((a, b) => a.v - b.v)[0]; // just over spot
+
+  const bias = dir === 'down' ? 'SELL' : dir === 'up' ? 'BUY' : 'NEUTRAL';
+  let sl, tp, basis;
+
+  if (bias === 'SELL') {
+    sl = nearestAbove ? round(nearestAbove.v + buf, 2) : round(spot * 1.02, 2);
+    tp = nearestBelow ? round(nearestBelow.v, 2) : round(spot * 0.96, 2);
+    basis = `SL above ${nearestAbove ? nearestAbove.from : '~2%'}, TP at ${nearestBelow ? nearestBelow.from : '~4%'}`;
+  } else {
+    // BUY or NEUTRAL -> treat as long setup
+    sl = nearestBelow ? round(nearestBelow.v - buf, 2) : round(spot * 0.985, 2);
+    tp = nearestAbove ? round(nearestAbove.v, 2) : round(spot * 1.03, 2);
+    basis = `SL below ${nearestBelow ? nearestBelow.from : '~1.5%'}, TP at ${nearestAbove ? nearestAbove.from : '~3%'}`;
+  }
+
+  const risk = Math.abs(spot - sl);
+  const reward = Math.abs(tp - spot);
+  const rr = risk > 0 ? round(reward / risk, 2) : null;
+
+  return { bias, entry: round(spot, 2), sl, tp, rr, basis };
 }
 
 /** Max Pain = expiry price that minimises total payoff owed to option buyers. */

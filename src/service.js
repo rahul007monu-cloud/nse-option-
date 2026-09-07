@@ -16,10 +16,26 @@
 
 const nse = require('./nse');
 const { analyze } = require('./analysis');
+const { runScan } = require('./scanner');
 const { loadBroker } = require('./brokers/loader');
 
 // Wire a broker adapter if BROKER_MODULE is configured (real-time from any host).
 loadBroker();
+
+// ---- Scanner with a short TTL cache (scanning ~300 symbols is not free) -----
+let scanCache = { at: 0, data: null, key: '' };
+const SCAN_TTL_MS = Number(process.env.SCAN_TTL_MS || 60000); // 60s
+async function getScan(opts = {}) {
+  const preferMock = !!opts.mock || process.env.PREFER_MOCK === '1';
+  const key = preferMock ? 'mock' : 'live';
+  const now = Date.now();
+  if (scanCache.data && scanCache.key === key && now - scanCache.at < SCAN_TTL_MS) {
+    return { ...scanCache.data, cached: true };
+  }
+  const data = await runScan({ preferMock });
+  scanCache = { at: now, data, key };
+  return { ...data, cached: false };
+}
 
 async function getHealth() {
   return {
@@ -53,4 +69,4 @@ async function getAnalysis(q = {}) {
   return analyze(chain, { daily });
 }
 
-module.exports = { getHealth, getSymbols, getAnalysis };
+module.exports = { getHealth, getSymbols, getAnalysis, getScan };

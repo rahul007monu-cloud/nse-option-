@@ -330,3 +330,23 @@ tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
 }
 .mock-banner code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; }
 .mock-banner a { color: #ffd97a; font-weight: 700; }
+
+
+/* ---------- v6: scanner page ---------- */
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); text-decoration: none; display: inline-flex; align-items: center; }
+.btn.ghost:hover { border-color: var(--accent); color: var(--accent); }
+.scan-meta { padding: 12px 20px; color: var(--muted); font-size: 13px; }
+.scan-meta b { color: var(--text); }
+.tabs { display: flex; gap: 8px; padding: 0 20px 12px; flex-wrap: wrap; }
+.tab {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 20px;
+  padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.tab:hover { border-color: var(--accent); }
+.tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab-count { background: rgba(0,0,0,0.2); border-radius: 10px; padding: 0 6px; margin-left: 4px; font-size: 11px; }
+.tab.active .tab-count { background: rgba(255,255,255,0.25); }
+.symlink { color: var(--accent); text-decoration: none; font-weight: 700; }
+.symlink:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
