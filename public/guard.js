@@ -8,7 +8,7 @@
   const toLogin = () =>
     location.replace('/auth.html?next=' + encodeURIComponent(location.pathname));
 
-  fetch('/api/auth/me', { credentials: 'same-origin' })
+  fetch('/api/auth?action=me', { credentials: 'same-origin' })
     .then((r) => r.json())
     .then((d) => {
       if (!d.user) return toLogin();
@@ -34,7 +34,7 @@
     (document.getElementById('userChip') || host).appendChild(el);
     const lb = document.getElementById('logoutBtn');
     if (lb) lb.addEventListener('click', async () => {
-      await fetch('/api/auth/logout', { credentials: 'same-origin' });
+      await fetch('/api/auth?action=logout', { credentials: 'same-origin' });
       location.href = '/';
     });
   }
