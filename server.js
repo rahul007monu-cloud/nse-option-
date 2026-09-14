@@ -137,7 +137,7 @@ const server = http.createServer(async (req, res) => {
         return sendJSON(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
       }
       const what = actionOf('admin');
-      const mutations = ['save', 'clear', 'test', 'user-plan', 'user-delete', 'plan-save', 'plan-delete'];
+      const mutations = ['save', 'clear', 'test', 'user-plan', 'user-delete', 'plan-save', 'plan-delete', 'pay-save'];
       if (mutations.includes(what) && req.method !== 'POST') return sendJSON(res, 405, { error: 'POST only: ' + what });
       if (what === 'status') return sendJSON(res, 200, service.getAdminStatus());
       if (what === 'save') return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
@@ -148,6 +148,7 @@ const server = http.createServer(async (req, res) => {
       if (what === 'user-delete') return sendJSON(res, 200, service.adminDeleteUser(await readBody(req)));
       if (what === 'plan-save') return sendJSON(res, 200, service.adminUpsertPlan(await readBody(req)));
       if (what === 'plan-delete') return sendJSON(res, 200, service.adminDeletePlan(await readBody(req)));
+      if (what === 'pay-save') return sendJSON(res, 200, service.adminSavePayment(await readBody(req)));
       return sendJSON(res, 404, { error: 'Unknown admin action: ' + (what || '(none)') });
     }
 

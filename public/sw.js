@@ -1,7 +1,11 @@
 'use strict';
 /* Minimal PWA service worker — cache the app shell for offline load.
    API calls are always network (never cached) so data stays fresh. */
-const CACHE = 'optionpulse-v2';
+// Bump this on every deploy that changes JS/CSS. The cache key is what busts
+// old assets — without a bump, returning visitors keep getting the previously
+// cached app.js/landing.js (stale-while-revalidate serves the old copy first),
+// which mismatches freshly deployed HTML and can render a blank page.
+const CACHE = 'optionpulse-v3';
 const SHELL = [
   '/style.css', '/landing.css', '/app.js', '/landing.js', '/scanner.js',
   '/auth-forms.js', '/guard.js', '/manifest.json',

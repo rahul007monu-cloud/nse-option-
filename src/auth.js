@@ -94,7 +94,17 @@ function sign(payloadStr) {
 }
 /** Mint a session token, or null when auth is not configured. */
 function createToken(user) {
-  const payload = { uid: user.id, role: user.role, exp: Date.now() + SESSION_DAYS * 86400000 };
+  // Everything needed to rebuild the session lives in the (signed) token, so a
+  // login survives the store being wiped on a serverless cold start. This is
+  // what makes the session truly stateless — the store is only a convenience
+  // for admin user-management, not the source of truth for "am I logged in".
+  const payload = {
+    uid: user.id,
+    role: user.role,
+    email: user.email,
+    plan: user.planId || 'free',
+    exp: Date.now() + SESSION_DAYS * 86400000,
+  };
   const p = b64url(JSON.stringify(payload));
   const sig = sign(p);
   return sig ? p + '.' + sig : null;
@@ -142,7 +152,23 @@ function currentUser(req) {
   const payload = verifyToken(token);
   if (!payload) return null;
   const u = store.findUserById(payload.uid);
-  return u || null;
+  if (u) return u;
+  // Store miss (Vercel /tmp reset on cold start). The token is HMAC-signed, so
+  // rebuild the session from it instead of logging the user out. This is why
+  // sessions no longer drop every cold start.
+  if (!payload.email) return null;
+  const email = String(payload.email).toLowerCase();
+  // Allowlisted email is always an admin, even if the token was minted before
+  // ADMIN_EMAIL was configured.
+  const role = adminEmails().includes(email) ? 'admin' : (payload.role || 'user');
+  return {
+    id: payload.uid,
+    email: payload.email,
+    name: payload.email.split('@')[0],
+    role,
+    planId: role === 'admin' ? 'premium' : (payload.plan || 'free'),
+    planExpiry: null,
+  };
 }
 
 // ---- signup / login --------------------------------------------------------

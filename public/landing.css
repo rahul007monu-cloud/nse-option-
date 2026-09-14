@@ -96,3 +96,52 @@ body.landing { background: #070a0f; overflow-x: hidden; }
 .auth-msg { min-height:18px; font-size:13px; margin-top:12px; text-align:center; }
 .auth-switch { text-align:center; margin-top:18px; color:#8b98a9; font-size:13px; }
 .auth-switch a { color:#7db0ff; text-decoration:none; font-weight:700; margin-left:6px; }
+
+
+/* ---- Payment (UPI QR) modal ---- */
+.pay-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 7, 12, 0.78);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  backdrop-filter: blur(4px);
+}
+.pay-box {
+  position: relative;
+  background: #10141c;
+  border: 1px solid #2a323d;
+  border-radius: 18px;
+  padding: 28px 26px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.pay-box h3 { margin: 0 0 6px; font-size: 20px; }
+.pay-sub { color: #8b98a9; margin: 4px 0 16px; font-size: 14px; }
+.pay-qr {
+  width: 230px;
+  max-width: 100%;
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+}
+.pay-upi { margin-top: 14px; font-size: 15px; }
+.pay-name { color: #b9c3d1; font-size: 13px; margin-top: 2px; }
+.pay-note { color: #8b98a9; font-size: 13px; margin: 14px 0 0; line-height: 1.55; }
+.pay-x {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: #8b98a9;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pay-x:hover { color: #fff; }

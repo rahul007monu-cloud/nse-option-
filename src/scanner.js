@@ -39,8 +39,9 @@ function possibilityDown(a) {
 }
 
 async function analyzeOne(symbol, preferMock) {
+  // skipLive: never attempt the slow per-symbol live-NSE priming in a bulk scan.
   const [chain, daily] = await Promise.all([
-    nse.getOptionChain(symbol, { preferMock }),
+    nse.getOptionChain(symbol, { preferMock, skipLive: true }),
     nse.getDailyHistory(symbol, { preferMock }),
   ]);
   const a = analyze(chain, { daily });
@@ -53,7 +54,19 @@ async function analyzeOne(symbol, preferMock) {
 async function runScan(opts = {}) {
   const preferMock = !!opts.preferMock || process.env.PREFER_MOCK === '1';
   const list = nse.listSymbols();
-  const symbols = [...list.indices, ...list.stocks].map((s) => s.symbol);
+  let symbols = [...list.indices, ...list.stocks].map((s) => s.symbol);
+
+  // Live/broker scanning can't fan out to the whole universe on a serverless
+  // request: a broker rate-limits ~300 quote bursts, and the function times
+  // out first. Cap it (indices stay first, so they're always covered). The
+  // mock path is pure compute (~200ms for 300), so it scans everything.
+  const fullUniverse = symbols.length;
+  const LIVE_CAP = Number(process.env.SCAN_MAX_LIVE || 40);
+  let capped = 0;
+  if (!preferMock && symbols.length > LIVE_CAP) {
+    capped = symbols.length - LIVE_CAP;
+    symbols = symbols.slice(0, LIVE_CAP);
+  }
 
   const rooms = { atSupport: [], at20dema: [], bullish: [], bearish: [], goldenCross: [], breakout: [] };
   let marketOpen = true;
@@ -151,6 +164,7 @@ async function runScan(opts = {}) {
     marketOpen,
     source,
     universe: symbols.length,
+    capped, // how many symbols were skipped in live mode (0 in mock)
     counts: Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.length])),
     rooms,
   };

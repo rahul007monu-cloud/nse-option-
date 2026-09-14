@@ -24,8 +24,13 @@ function defaultPlans() {
       currency: 'INR',
       period: 'forever',
       tagline: 'Get started',
-      features: ['chain', 'greeks'],
-      limits: { symbols: 'indices only', refreshSec: 15 },
+      // No payment gateway is wired yet (the pricing page says as much), so
+      // gating features behind paid tiers only locks users — and the owner —
+      // out of a product nobody can pay to upgrade. Until payments exist, Free
+      // includes everything. To re-introduce tiers later, trim this list and
+      // assign paid plans from the admin panel.
+      features: ['chain', 'greeks', 'dema', 'scanner', 'live'],
+      limits: { symbols: 'all F&O', refreshSec: 5 },
       highlights: ['Index option chain', 'PCR, Max Pain', 'Greeks & Theta', 'Mock/demo data'],
       active: true,
       order: 1,

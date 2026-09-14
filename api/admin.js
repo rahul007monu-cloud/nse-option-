@@ -35,6 +35,7 @@ module.exports = async (req, res) => {
     if (what === 'user-delete') return send(res, 200, service.adminDeleteUser(await readBody(req)));
     if (what === 'plan-save') return send(res, 200, service.adminUpsertPlan(await readBody(req)));
     if (what === 'plan-delete') return send(res, 200, service.adminDeletePlan(await readBody(req)));
+    if (what === 'pay-save') return send(res, 200, service.adminSavePayment(await readBody(req)));
     return send(res, 404, { error: 'Unknown admin action: ' + (what || '(none)') });
   } catch (e) {
     return send(res, 500, { error: String(e && e.message) });
