@@ -319,4 +319,10 @@ function nearestIndex(arr, v) {
 }
 function round(x, n) { const f = Math.pow(10, n); return Math.round(x * f) / f; }
 
-module.exports = { fetchChain, fetchDaily };
+module.exports = {
+  fetchChain,
+  fetchDaily,
+  // Exposed for scripts/angel-check.js so each stage (login / scrip master /
+  // chain) can be verified and reported on independently.
+  _internal: { ensureLogin, loadScrip, parseAngelExpiry, fmtExpiry, INDEX_TOKENS },
+};

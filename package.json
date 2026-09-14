@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "live-check": "node scripts/live-check.js"
+    "live-check": "node scripts/live-check.js",
+    "angel-check": "node scripts/angel-check.js"
   },
   "engines": {
     "node": ">=18"
