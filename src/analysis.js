@@ -232,6 +232,7 @@ function analyze(chain, opts = {}) {
     symbol: chain.symbol,
     type: chain.type || cfg.type,
     source: chain.source,
+    sourceError: chain.sourceError || null,
     marketOpen: chain.marketOpen !== false,
     marketStatus: chain.marketStatus || (chain.marketOpen === false ? 'CLOSED' : 'OPEN'),
     underlyingValue: spot,

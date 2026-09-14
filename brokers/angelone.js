@@ -22,6 +22,7 @@ const zlib = require('zlib');
 const { totp } = require('../src/totp');
 const { getCredentials } = require('../src/credentials');
 const greeks = require('../src/greeks');
+const cache = require('../src/cache');
 
 const HOST = 'apiconnect.angelone.in';
 const SCRIP_URL = 'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json';
@@ -85,12 +86,22 @@ function baseHeaders(apiKey, jwt) {
   return h;
 }
 
-// ---- session (cached) -------------------------------------------------------
+// ---- session (cached: memory + shared cache) --------------------------------
 let session = { jwt: null, at: 0 };
 const SESSION_TTL = 6 * 3600 * 1000; // re-login every ~6h
+const JWT_KEY = 'angel:jwt';
 
 async function ensureLogin(creds) {
+  // 1) this process
   if (session.jwt && Date.now() - session.at < SESSION_TTL) return session.jwt;
+  // 2) shared cache (so a fresh serverless instance reuses a recent login
+  //    instead of hitting Angel's login rate limit every request)
+  const cached = await cache.get(JWT_KEY);
+  if (cached && cached.jwt && Date.now() - (cached.at || 0) < SESSION_TTL) {
+    session = { jwt: cached.jwt, at: cached.at };
+    return session.jwt;
+  }
+  // 3) real login
   const code = totp(creds.totpSecret);
   const { status, json } = await httpsJson(
     'POST', HOST,
@@ -103,10 +114,17 @@ async function ensureLogin(creds) {
     throw new Error('Angel login failed: ' + msg);
   }
   session = { jwt: json.data.jwtToken, at: Date.now() };
+  await cache.set(JWT_KEY, session, 5 * 3600); // 5h, < Angel session validity
   return session.jwt;
 }
 
-// ---- scrip master (cached per day) -----------------------------------------
+/** Force a re-login on the next call (used when a cached JWT is rejected). */
+async function invalidateLogin() {
+  session = { jwt: null, at: 0 };
+  await cache.del(JWT_KEY);
+}
+
+// ---- scrip master (full list cached per day, in this process only) ----------
 let scrip = { day: null, list: null };
 async function loadScrip() {
   const day = new Date().toISOString().slice(0, 10);
@@ -115,6 +133,35 @@ async function loadScrip() {
   if (!Array.isArray(json)) throw new Error('Angel scrip master fetch failed');
   scrip = { day, list: json };
   return json;
+}
+
+/**
+ * Per-symbol instrument bundle (option tokens + spot token), cached in the
+ * shared cache. This is the big serverless win: the full ~100k-row scrip master
+ * (several MB) only has to be downloaded by the process that first fills a
+ * symbol's cache; every other request/instance reads a few KB from the cache
+ * instead, which is what keeps a cold request inside the function time limit.
+ */
+async function getInstrumentBundle(symbol, isIndex) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `angel:inst:${symbol}:${day}`;
+  const cached = await cache.get(key);
+  if (cached && Array.isArray(cached.opts) && cached.opts.length) return cached;
+
+  const list = await loadScrip();
+  const optType = isIndex ? 'OPTIDX' : 'OPTSTK';
+  const opts = list
+    .filter((r) => r.exch_seg === 'NFO' && r.instrumenttype === optType && (r.name || '').toUpperCase() === symbol)
+    .map((o) => ({ symbol: o.symbol, expiry: o.expiry, strike: o.strike, token: o.token, lotsize: o.lotsize }));
+
+  let spotToken = INDEX_TOKENS[symbol] || null;
+  if (!spotToken) {
+    const eq = list.find((r) => r.exch_seg === 'NSE' && (r.name || '').toUpperCase() === symbol && /-EQ$/.test(r.symbol || ''));
+    spotToken = eq ? eq.token : null;
+  }
+  const bundle = { opts, spotToken: spotToken ? String(spotToken) : null };
+  if (opts.length) await cache.set(key, bundle, 12 * 3600);
+  return bundle;
 }
 
 const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -146,9 +193,6 @@ async function quoteFull(creds, jwt, exchangeTokens) {
   return json.data.fetched || [];
 }
 
-// intraday OI memory for change-in-OI
-const prevOI = {}; // token -> oi
-
 // ---- public: fetchChain -----------------------------------------------------
 async function fetchChain(symbol, expiryWanted) {
   const creds = getCredentials();
@@ -156,15 +200,11 @@ async function fetchChain(symbol, expiryWanted) {
   symbol = symbol.toUpperCase();
 
   const jwt = await ensureLogin(creds);
-  const list = await loadScrip();
 
   const isIndex = !!INDEX_TOKENS[symbol];
-  const optType = isIndex ? 'OPTIDX' : 'OPTSTK';
-
-  // all option instruments for this underlying
-  const opts = list.filter(
-    (r) => r.exch_seg === 'NFO' && r.instrumenttype === optType && (r.name || '').toUpperCase() === symbol
-  );
+  // Per-symbol instrument tokens (cached) instead of scanning the full master.
+  const bundle = await getInstrumentBundle(symbol, isIndex);
+  const opts = bundle.opts;
   if (!opts.length) throw new Error(`No F&O options found for ${symbol} in scrip master`);
 
   // expiries
@@ -178,13 +218,9 @@ async function fetchChain(symbol, expiryWanted) {
   const expDate = expMap.get(expiry);
   const T = Math.max((expDate.getTime() - Date.now()) / (365 * 86400000), 0.25 / 24 / 365);
 
-  // underlying spot token
+  // underlying spot token (from the cached bundle)
   let spot = null;
-  let spotToken = INDEX_TOKENS[symbol];
-  if (!spotToken) {
-    const eq = list.find((r) => r.exch_seg === 'NSE' && (r.name || '').toUpperCase() === symbol && /-EQ$/.test(r.symbol || ''));
-    spotToken = eq ? eq.token : null;
-  }
+  const spotToken = bundle.spotToken || INDEX_TOKENS[symbol] || null;
   if (spotToken) {
     try {
       const f = await quoteFull(creds, jwt, { NSE: [String(spotToken)] });
@@ -222,9 +258,25 @@ async function fetchChain(symbol, expiryWanted) {
     if (s.PE) tokens.push(s.PE.token);
   }
   const quoteMap = {};
+  let activeJwt = jwt;
+  let reloggedIn = false;
   for (let i = 0; i < tokens.length; i += 50) {
     const batch = tokens.slice(i, i + 50);
-    const fetched = await quoteFull(creds, jwt, { NFO: batch });
+    let fetched;
+    try {
+      fetched = await quoteFull(creds, activeJwt, { NFO: batch });
+    } catch (e) {
+      // A cached JWT can be rejected by Angel. Re-login once and retry so a
+      // stale token self-heals instead of dropping the whole poll to mock.
+      if (!reloggedIn) {
+        reloggedIn = true;
+        await invalidateLogin();
+        activeJwt = await ensureLogin(creds);
+        fetched = await quoteFull(creds, activeJwt, { NFO: batch });
+      } else {
+        throw e;
+      }
+    }
     for (const q of fetched) quoteMap[String(q.symbolToken)] = q;
   }
 
@@ -236,6 +288,14 @@ async function fetchChain(symbol, expiryWanted) {
     if (c && p) spot = round(atmK + (c.ltp - p.ltp), 2);
   }
 
+  // change-in-OI needs the previous poll's OI. On serverless that can't live in
+  // process memory (every request is a fresh process -> change would always be
+  // 0, which flatlines the whole momentum signal). So the last OI snapshot is
+  // kept in the shared cache, keyed per symbol+expiry.
+  const oiKey = `angel:oi:${symbol}:${expiry}`;
+  const prevMap = (await cache.get(oiKey)) || {};
+  const newMap = {};
+
   const rows = [];
   for (const k of picked) {
     const s = byStrike.get(k);
@@ -243,10 +303,12 @@ async function fetchChain(symbol, expiryWanted) {
     const pq = s.PE && quoteMap[s.PE.token];
     rows.push({
       strikePrice: k,
-      CE: legFrom('CE', k, spot, T, cq, s.CE && s.CE.token),
-      PE: legFrom('PE', k, spot, T, pq, s.PE && s.PE.token),
+      CE: legFrom('CE', k, spot, T, cq, s.CE && s.CE.token, prevMap, newMap),
+      PE: legFrom('PE', k, spot, T, pq, s.PE && s.PE.token, prevMap, newMap),
     });
   }
+  // Persist this poll's OI for the next one (2h TTL covers a trading session).
+  if (Object.keys(newMap).length) { try { await cache.set(oiKey, newMap, 2 * 3600); } catch (_) {} }
 
   return {
     source: 'broker',
@@ -260,11 +322,11 @@ async function fetchChain(symbol, expiryWanted) {
   };
 }
 
-function legFrom(type, strike, spot, T, q, token) {
+function legFrom(type, strike, spot, T, q, token, prevMap, newMap) {
   if (!q) return { openInterest: 0, changeinOpenInterest: 0, totalTradedVolume: 0, impliedVolatility: 0, lastPrice: 0 };
   const oi = Number(q.opnInterest || q.openInterest || 0);
-  const prev = token && prevOI[token] != null ? prevOI[token] : oi;
-  if (token) prevOI[token] = oi;
+  const prev = token && prevMap && prevMap[token] != null ? prevMap[token] : oi;
+  if (token && newMap) newMap[token] = oi;
   const ltp = Number(q.ltp || 0);
   let ivPct = 0;
   const iv = greeks.impliedVol(type, ltp, spot, strike, T, RISK_FREE);
@@ -285,13 +347,12 @@ async function fetchDaily(symbol) {
   symbol = symbol.toUpperCase();
   try {
     const jwt = await ensureLogin(creds);
-    const list = await loadScrip();
-    let token = INDEX_TOKENS[symbol];
-    let exchange = 'NSE';
-    if (!token) {
-      const eq = list.find((r) => r.exch_seg === 'NSE' && (r.name || '').toUpperCase() === symbol && /-EQ$/.test(r.symbol || ''));
-      token = eq ? eq.token : null;
-    }
+    const exchange = 'NSE';
+    // Reuse the cached per-symbol bundle so we don't re-download the full scrip
+    // master just to resolve one historical token.
+    const isIndex = !!INDEX_TOKENS[symbol];
+    const bundle = await getInstrumentBundle(symbol, isIndex);
+    const token = INDEX_TOKENS[symbol] || bundle.spotToken || null;
     if (!token) return null;
     const to = new Date();
     const from = new Date(to.getTime() - 320 * 86400000);

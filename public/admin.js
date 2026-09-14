@@ -101,9 +101,11 @@ function renderDashboard(s) {
   const b = s.broker || {};
   $('cBroker').textContent = b.loaded ? 'ON' : 'OFF';
   $('cHost').textContent = s.onVercel ? 'Vercel' : 'Self-host';
+  const cc = s.cache || {};
   $('secBox').innerHTML =
     `Admin protection: <b>${s.adminProtected ? 'ON (password)' : (s.onVercel ? '<span style="color:#f43f5e">OFF — set ADMIN_TOKEN!</span>' : 'localhost only')}</b><br>` +
     `Broker adapter: <b>${b.loaded ? b.name : 'inactive'}</b><br>` +
+    `Cache: <b>${cc.enabled ? 'Redis (Upstash) ✅' : 'in-memory only (Vercel pe live data ke liye Upstash lagao)'}</b><br>` +
     `Credentials: <b>${s.configured ? 'set (' + s.source + ')' : 'not set'}</b><br>` +
     (s.onVercel ? `<span style="color:#f0c674">⚠️ Vercel: file-saved data is temporary. Use Environment Variables for permanence.</span>` : 'Self-host: data persists in data/.');
 }

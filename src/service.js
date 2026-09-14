@@ -20,6 +20,7 @@ const { runScan } = require('./scanner');
 const cred = require('./credentials');
 const store = require('./store');
 const auth = require('./auth');
+const cache = require('./cache');
 const { loadBroker, reloadBroker, brokerStatus } = require('./brokers/loader');
 
 // Wire a broker adapter if configured (Angel One creds or BROKER_MODULE).
@@ -46,7 +47,12 @@ function adminLockReason(host) {
   return 'Locked.';
 }
 function getAdminStatus() {
-  return { ...cred.getStatus(), broker: brokerStatus(), adminProtected: !!process.env.ADMIN_TOKEN };
+  return {
+    ...cred.getStatus(),
+    broker: brokerStatus(),
+    adminProtected: !!process.env.ADMIN_TOKEN,
+    cache: cache.status(), // { backend: 'upstash'|'memory', enabled }
+  };
 }
 function saveAdminCreds(body) {
   const r = cred.saveCredentials(body || {});

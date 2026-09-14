@@ -422,6 +422,7 @@ async function getOptionChain(symbol, opts = {}) {
     return chain;
   };
 
+  let brokerError = null;
   if (brokerFetcher && !opts.preferMock) {
     try {
       const chain = await brokerFetcher(symbol, expiryDates[idx]);
@@ -431,7 +432,12 @@ async function getOptionChain(symbol, opts = {}) {
         chain.expiryDates = chain.expiryDates || expiryDates;
         return stamp(chain);
       }
-    } catch (_) { /* fall through */ }
+      brokerError = 'Broker ne khali chain diya';
+    } catch (e) {
+      // Capture WHY the broker failed so the UI can show it instead of silently
+      // dropping to the simulator (the #1 "why is it mock?" mystery).
+      brokerError = String((e && e.message) || e);
+    }
   }
 
   // The direct live-NSE path primes cookies then hits the JSON API — several
@@ -450,6 +456,10 @@ async function getOptionChain(symbol, opts = {}) {
 
   const chain = buildMock(symbol, cfg, expiries[idx], mkt.open);
   chain.expiryDates = expiryDates;
+  // Why did we end up on mock? (only when the user did NOT explicitly ask for it)
+  if (opts.preferMock) chain.sourceError = null;         // user chose Mock — no error
+  else if (brokerError) chain.sourceError = brokerError; // broker set but failed — real reason
+  else if (!brokerFetcher) chain.sourceError = 'Broker configured nahi hai (Angel creds / env missing)';
   return stamp(chain);
 }
 

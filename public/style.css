@@ -371,3 +371,16 @@ tfoot .totals-row td.verdict { font-weight: 600; font-size: 12px; }
   background: #0b0e13; border: 1px solid var(--line); border-radius: 8px;
   padding: 12px; font-size: 12px; color: #9fe0b0; overflow-x: auto; white-space: pre;
 }
+
+
+/* Reason line under the SIMULATED-DATA banner (real broker error) */
+.mock-reason {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(240, 82, 82, 0.12);
+  color: #ffb4a2;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  word-break: break-word;
+}
