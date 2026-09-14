@@ -9,14 +9,63 @@
 
 const crypto = require('crypto');
 const store = require('./store');
-const { planHasFeature } = require('./plans');
 
 const COOKIE = 'op_session';
 const SESSION_DAYS = 30;
+const MIN_SECRET_LEN = 32;
 
+const IS_PRODUCTION = !!process.env.VERCEL || process.env.NODE_ENV === 'production';
+
+const CONFIG_ERROR =
+  'Server misconfigured: SESSION_SECRET set nahi hai. Deploy me ye env var daalo (openssl rand -hex 48).';
+
+let devSecret = null;
+let devWarned = false;
+
+/**
+ * HMAC key for session tokens.
+ *
+ * There is deliberately NO hardcoded fallback. This file is public, so a
+ * baked-in default would let anyone forge an admin session by signing their
+ * own cookie. Returns null when no usable secret exists; every caller then
+ * fails closed (nobody is logged in, and no token can be minted).
+ */
 function secret() {
-  // Prefer an explicit secret; else derive a stable-per-deploy fallback.
-  return process.env.SESSION_SECRET || process.env.ADMIN_TOKEN || 'op-dev-secret-change-me';
+  const fromEnv = process.env.SESSION_SECRET;
+  if (fromEnv && fromEnv.length >= MIN_SECRET_LEN) return fromEnv;
+
+  if (fromEnv) {
+    console.error(
+      `[auth] SESSION_SECRET is only ${fromEnv.length} chars, needs >= ${MIN_SECRET_LEN}. Refusing to use it.`
+    );
+    return null;
+  }
+  if (IS_PRODUCTION) {
+    console.error('[auth] SESSION_SECRET is not set — logins are disabled. Generate one: openssl rand -hex 48');
+    return null;
+  }
+  // Local dev only: a random per-process secret. Sessions die on restart,
+  // which is the safe default. Set SESSION_SECRET to make them persist.
+  if (!devSecret) devSecret = crypto.randomBytes(48).toString('hex');
+  if (!devWarned) {
+    devWarned = true;
+    console.warn('[auth] SESSION_SECRET not set — using a random dev secret. Sessions reset on restart.');
+  }
+  return devSecret;
+}
+
+/** Can sessions be signed/verified right now? Lets the API return a clear error. */
+function authConfigured() {
+  return secret() !== null;
+}
+
+/** Emails allowed to become admin on signup (comma-separated ADMIN_EMAIL). */
+function adminEmails() {
+  return String(process.env.ADMIN_EMAIL || '')
+    .toLowerCase()
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // ---- password hashing ------------------------------------------------------
@@ -36,19 +85,29 @@ function verifyPassword(password, salt, hash) {
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64urlDecode = (s) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
 
+/** HMAC signature, or null when no secret is configured. */
 function sign(payloadStr) {
-  return crypto.createHmac('sha256', secret()).update(payloadStr).digest('base64')
+  const key = secret();
+  if (!key) return null;
+  return crypto.createHmac('sha256', key).update(payloadStr).digest('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+/** Mint a session token, or null when auth is not configured. */
 function createToken(user) {
   const payload = { uid: user.id, role: user.role, exp: Date.now() + SESSION_DAYS * 86400000 };
   const p = b64url(JSON.stringify(payload));
-  return p + '.' + sign(p);
+  const sig = sign(p);
+  return sig ? p + '.' + sig : null;
 }
 function verifyToken(token) {
   if (!token || token.indexOf('.') < 0) return null;
   const [p, sig] = token.split('.');
-  if (sign(p) !== sig) return null;
+  const expected = sign(p);
+  if (!expected || !sig) return null;
+  // Constant-time compare so signature checks can't be timing-probed.
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(sig, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
     const payload = JSON.parse(b64urlDecode(p));
     if (!payload.exp || payload.exp < Date.now()) return null;
@@ -90,35 +149,42 @@ function currentUser(req) {
 function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '')); }
 
 function signup({ name, email, password }) {
+  if (!authConfigured()) return { ok: false, error: CONFIG_ERROR };
   email = String(email || '').toLowerCase().trim();
   if (!validEmail(email)) return { ok: false, error: 'Valid email daalo' };
-  if (!password || String(password).length < 6) return { ok: false, error: 'Password kam se kam 6 characters' };
+  if (!password || String(password).length < 8) return { ok: false, error: 'Password kam se kam 8 characters' };
   if (store.findUserByEmail(email)) return { ok: false, error: 'Ye email already registered hai' };
 
   const { salt, hash } = hashPassword(password);
-  const isAdmin = process.env.ADMIN_EMAIL && email === process.env.ADMIN_EMAIL.toLowerCase();
-  const firstUser = store.allUsers().length === 0;
+  // Admin is granted ONLY by the ADMIN_EMAIL allowlist. There is deliberately
+  // no "first user becomes admin" bootstrap: on an ephemeral store (Vercel /tmp)
+  // that resets every cold start, so whoever signed up next became admin.
   const user = {
     id: store.nextId(),
     name: String(name || '').trim() || email.split('@')[0],
     email,
     salt, hash,
-    role: isAdmin || firstUser ? 'admin' : 'user', // first user bootstraps admin
+    role: adminEmails().includes(email) ? 'admin' : 'user',
     planId: 'free',
     planExpiry: null,
     createdAt: new Date().toISOString(),
   };
   store.addUser(user);
-  return { ok: true, user, token: createToken(user) };
+  const token = createToken(user);
+  if (!token) return { ok: false, error: CONFIG_ERROR };
+  return { ok: true, user, token };
 }
 
 function login({ email, password }) {
+  if (!authConfigured()) return { ok: false, error: CONFIG_ERROR };
   email = String(email || '').toLowerCase().trim();
   const u = store.findUserByEmail(email);
   if (!u || !verifyPassword(password, u.salt, u.hash)) {
     return { ok: false, error: 'Email ya password galat' };
   }
-  return { ok: true, user: u, token: createToken(u) };
+  const token = createToken(u);
+  if (!token) return { ok: false, error: CONFIG_ERROR };
+  return { ok: true, user: u, token };
 }
 
 // ---- public projection + entitlements --------------------------------------
@@ -142,7 +208,8 @@ function userHasFeature(u, feature) {
 }
 
 module.exports = {
-  COOKIE, hashPassword, verifyPassword,
+  COOKIE, CONFIG_ERROR, hashPassword, verifyPassword,
   createToken, verifyToken, parseCookies, sessionCookie, clearCookie,
   currentUser, signup, login, publicUser, userHasFeature,
+  authConfigured, adminEmails,
 };

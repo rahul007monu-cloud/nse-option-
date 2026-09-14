@@ -70,16 +70,26 @@
   frame();
 })();
 
-// ---- nav auth state --------------------------------------------------------
+// ---- auth state: only show app links to a logged-in visitor ----------------
 fetch('/api/auth/me', { credentials: 'same-origin' })
   .then((r) => r.json())
   .then((d) => {
-    if (d.user) {
-      const el = document.getElementById('navAuth');
-      if (el) el.innerHTML =
-        `<span class="plan-badge plan-${d.user.planId}">${d.user.planName}</span>` +
-        `<a class="btn" href="/app.html">Open Dashboard →</a>`;
-    }
+    if (!d.user) return; // stay with the logged-out markup in index.html
+    const u = d.user;
+
+    const nav = document.getElementById('navAuth');
+    if (nav) nav.innerHTML =
+      `<span class="plan-badge plan-${escapeHtml(u.planId)}">${escapeHtml(u.planName)}</span>` +
+      `<a class="btn" href="/app.html">Open Dashboard →</a>`;
+
+    const cta = document.getElementById('heroCta');
+    if (cta) cta.innerHTML =
+      `<a class="btn big" href="/app.html">📊 Open Dashboard →</a>` +
+      `<a class="btn big ghost" href="/scanner.html">🛰️ Scanner</a>`;
+
+    const foot = document.getElementById('footerLinks');
+    if (foot) foot.innerHTML =
+      `<a href="/app.html">Dashboard</a> · <a href="/scanner.html">Scanner</a> · <a href="#pricing">Pricing</a>`;
   })
   .catch(() => {});
 

@@ -50,10 +50,12 @@ const MIME = {
 };
 
 function sendJSON(res, status, obj, extraHeaders) {
+  // No wildcard CORS: these endpoints are cookie-authenticated and the frontend
+  // is served same-origin, so cross-origin access is never needed.
   res.writeHead(status, Object.assign({
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
+    'X-Content-Type-Options': 'nosniff',
   }, extraHeaders || {}));
   res.end(JSON.stringify(obj));
 }
@@ -116,7 +118,9 @@ const server = http.createServer(async (req, res) => {
 
     // ---- Admin (credentials + platform admin) ----
     if (pathname.startsWith('/api/admin')) {
-      const token = req.headers['x-admin-token'] || parsed.searchParams.get('token') || '';
+      // Header only — a ?token= query param would leak the admin password into
+      // access logs, browser history and Referer headers.
+      const token = req.headers['x-admin-token'] || '';
       if (!service.isPlatformAdmin(req, token, req.headers.host)) {
         return sendJSON(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
       }
@@ -139,15 +143,20 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, service.getSymbols());
     }
     if (pathname === '/api/scan') {
+      const gate = service.authorize(req, 'scanner');
+      if (!gate.ok) return sendJSON(res, gate.status, { error: gate.error, needsFeature: gate.needsFeature });
       const result = await service.getScan({ mock: parsed.searchParams.get('mock') === '1' });
       return sendJSON(res, 200, result);
     }
 
     if (pathname === '/api/analysis') {
+      const gate = service.authorize(req, 'chain');
+      if (!gate.ok) return sendJSON(res, gate.status, { error: gate.error, needsFeature: gate.needsFeature });
       const result = await service.getAnalysis({
         symbol: parsed.searchParams.get('symbol') || 'NIFTY',
         mock: parsed.searchParams.get('mock') === '1',
         expiryIndex: parseInt(parsed.searchParams.get('expiry') || '0', 10) || 0,
+        features: service.featuresFor(gate.user),
       });
       pushHistory(result.symbol, {
         t: result.timestamp,
@@ -160,6 +169,8 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, result);
     }
     if (pathname === '/api/history') {
+      const gate = service.authorize(req, 'chain');
+      if (!gate.ok) return sendJSON(res, gate.status, { error: gate.error });
       const symbol = (parsed.searchParams.get('symbol') || 'NIFTY').toUpperCase();
       return sendJSON(res, 200, { symbol, history: history[symbol] || [] });
     }

@@ -19,8 +19,28 @@ async function scan() {
   $('scanMeta').textContent = 'Scanning full F&O universe… (thoda ruko)';
   const mock = $('mock').checked ? '1' : '0';
   try {
-    const r = await fetch('/api/scan?mock=' + mock);
+    const r = await fetch('/api/scan?mock=' + mock, { credentials: 'same-origin' });
     const data = await r.json();
+
+    // The scanner is a paid feature and the endpoint is gated server-side.
+    if (r.status === 401) {
+      location.replace('/auth.html?next=' + encodeURIComponent(location.pathname));
+      return;
+    }
+    if (r.status === 403) {
+      $('scanMeta').innerHTML =
+        `🔒 ${escapeHtml(data.error || 'Scanner tumhare plan me nahi hai.')} ` +
+        `<a class="symlink" href="/#pricing">Plans dekho →</a>`;
+      $('roomBody').innerHTML =
+        `<tr><td colspan="11" style="text-align:center;color:var(--muted);padding:24px">` +
+        `Scanner <b>Pro</b> plan se unlock hota hai.</td></tr>`;
+      $('tabs').innerHTML = '';
+      return;
+    }
+    if (!r.ok) {
+      $('scanMeta').textContent = data.error || `Scan failed (${r.status})`;
+      return;
+    }
     lastData = data;
     render(data);
   } catch (e) {

@@ -1,7 +1,27 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const token = () => ($('adminToken') ? $('adminToken').value.trim() : '');
+
+/* Admin password handling.
+   Kept in sessionStorage (cleared when the tab closes) so unlocking does not
+   depend on a DOM element surviving a reload. Previously the lock screen
+   injected a second element with the same id as the one on the settings tab,
+   and "Unlock" called location.reload(), which threw away whatever was typed —
+   so a public deployment could never actually be unlocked. */
+const TOKEN_KEY = 'op_admin_token';
+
+function token() {
+  const typed = ($('lockToken') && $('lockToken').value.trim()) ||
+                ($('adminToken') && $('adminToken').value.trim()) || '';
+  if (typed) {
+    try { sessionStorage.setItem(TOKEN_KEY, typed); } catch (_) {}
+    return typed;
+  }
+  try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; }
+}
+function clearToken() {
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (_) {}
+}
 const authHdr = () => ({ 'Content-Type': 'application/json', 'x-admin-token': token() });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -18,15 +38,19 @@ document.querySelectorAll('.a-nav button').forEach((b) =>
 );
 
 // ---- boot: check admin access ---------------------------------------------
-(async function boot() {
+async function boot() {
   let me = null;
   try { me = (await (await fetch('/api/auth/me', { credentials: 'same-origin' })).json()).user; } catch (_) {}
-  // Try admin status (session admin OR localhost). If 401 -> locked screen.
+  // Try admin status (session admin OR ADMIN_TOKEN OR localhost). 401 -> locked.
   let status;
   try {
-    const r = await fetch('/api/admin/status', { headers: { 'x-admin-token': token() } });
+    const r = await fetch('/api/admin/status', {
+      credentials: 'same-origin',
+      headers: { 'x-admin-token': token() },
+    });
     if (r.status === 401) {
       const j = await r.json().catch(() => ({}));
+      clearToken(); // wrong password -> don't keep retrying with it
       showLock(j.reason || 'Admin locked.', me);
       return;
     }
@@ -35,12 +59,13 @@ document.querySelectorAll('.a-nav button').forEach((b) =>
 
   $('wrap').style.display = '';
   $('lock').style.display = 'none';
-  $('whoami').textContent = me ? `${me.name} (${me.role})` : 'localhost';
+  $('whoami').textContent = me ? `${me.name} (${me.role})` : 'admin token';
   renderDashboard(status);
   loadUsers();
   loadPlans();
   loadCreds(status);
-})();
+}
+boot();
 
 function showLock(reason, me) {
   $('wrap').style.display = 'none';
@@ -50,9 +75,24 @@ function showLock(reason, me) {
     `<h2>🔒 Admin locked</h2><p>${esc(reason)}</p>` +
     (me ? `<p>Logged in as <b>${esc(me.email)}</b> (role: ${me.role}). Sirf <b>admin</b> role access kar sakta hai.</p>`
         : `<p><a class="a-btn" href="/auth.html?next=/admin.html">Login as admin</a></p>`) +
-    `<p style="margin-top:16px">Public URL pe: Vercel me <b>ADMIN_TOKEN</b> set karo aur upar wale field me daalo, ya admin account se login karo.</p>` +
-    `<div class="a-fld" style="max-width:320px;margin:16px auto"><span>Admin password</span><input id="adminToken" type="password" /></div>` +
-    `<button class="a-btn" onclick="location.reload()">Unlock</button>`;
+    `<p style="margin-top:16px">Public URL pe: Vercel me <b>ADMIN_TOKEN</b> set karo aur neeche daalo, ya admin account se login karo.</p>` +
+    `<div class="a-fld" style="max-width:320px;margin:16px auto">
+       <span>Admin password</span>
+       <input id="lockToken" type="password" autocomplete="current-password" />
+     </div>` +
+    `<button class="a-btn" id="unlockBtn">Unlock</button>` +
+    `<p id="lockMsg" style="margin-top:10px;color:var(--a-muted)"></p>`;
+
+  const go = () => {
+    const val = $('lockToken').value.trim();
+    if (!val) { $('lockMsg').textContent = 'Password daalo.'; return; }
+    $('lockMsg').textContent = 'Checking…';
+    try { sessionStorage.setItem(TOKEN_KEY, val); } catch (_) {}
+    boot(); // re-check in place; no reload, so nothing typed is lost
+  };
+  $('unlockBtn').addEventListener('click', go);
+  $('lockToken').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  $('lockToken').focus();
 }
 
 // ---- dashboard -------------------------------------------------------------

@@ -37,9 +37,12 @@
         and a daily scanner that finds bullish, bearish, golden-cross & breakout
         setups with Stop-Loss and Target — all in one place.
       </p>
-      <div class="hero-cta">
+      <!-- Logged-out default. landing.js swaps in "Open Dashboard" once
+           /api/auth/me confirms a session, so we never advertise a link that
+           just bounces the visitor to the login page. -->
+      <div class="hero-cta" id="heroCta">
         <a class="btn big" href="/auth.html?mode=signup">🚀 Start Free</a>
-        <a class="btn big ghost" href="/app.html">Open Dashboard →</a>
+        <a class="btn big ghost" href="/auth.html">Login</a>
       </div>
       <div class="hero-stats">
         <div><b id="statSymbols">300+</b><span>F&O instruments</span></div>
@@ -73,7 +76,7 @@
 
   <footer class="lfooter">
     <div>📈 <b>OptionPulse</b> — educational analytics for NSE F&O. Not investment advice.</div>
-    <div class="lfooter-links"><a href="/app.html">Dashboard</a> · <a href="/scanner.html">Scanner</a> · <a href="/auth.html">Login</a></div>
+    <div class="lfooter-links" id="footerLinks"><a href="#features">Features</a> · <a href="#pricing">Pricing</a> · <a href="/auth.html">Login</a></div>
   </footer>
 
   <script src="/landing.js"></script>
