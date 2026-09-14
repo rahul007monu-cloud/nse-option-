@@ -14,6 +14,7 @@
       <button data-tab="dash" class="active">📊 Dashboard</button>
       <button data-tab="users">👥 Users</button>
       <button data-tab="plans">💳 Plans</button>
+      <button data-tab="pay">📷 Payments</button>
       <button data-tab="api">🔌 API &amp; Data</button>
     </nav>
     <div class="a-side-foot">
@@ -76,6 +77,24 @@
           <div class="a-fld"><span>Highlights (one per line)</span><textarea id="pl_highlights" rows="3"></textarea></div>
           <button class="a-btn" id="savePlan">💾 Save plan</button>
           <div class="a-msg" id="planMsg"></div>
+        </div>
+      </section>
+
+      <!-- PAYMENTS -->
+      <section class="a-page" id="page-pay">
+        <h1 class="a-h">Payments (UPI QR)</h1>
+        <p class="a-sub">Apna UPI QR + ID set karo. Users ko paid plan choose karne pe ye dikhega; payment ke baad Users tab se unka plan activate karo.</p>
+        <div class="a-card">
+          <div class="a-fld"><span>UPI ID (e.g. name@okhdfcbank)</span><input id="pay_upi" placeholder="yourname@upi" /></div>
+          <div class="a-fld"><span>QR image URL — ya paste karo data:image/... (apne UPI app se QR export karke)</span><input id="pay_qr" placeholder="https://… ya data:image/png;base64,…" /></div>
+          <div class="a-fld"><span>Payee name (optional)</span><input id="pay_name" /></div>
+          <div class="a-fld"><span>Instructions (optional, users ko dikhega)</span><textarea id="pay_note" rows="2" placeholder="Payment ke baad screenshot WhatsApp karo 98xxxxxxx pe — plan 24h me activate."></textarea></div>
+          <button class="a-btn" id="savePay">💾 Save payment info</button>
+          <div class="a-msg" id="payMsg"></div>
+        </div>
+        <div class="a-card">
+          <h3>Preview</h3>
+          <div id="payPreview" style="text-align:center;color:var(--a-muted)">Save karke yahan QR preview dikhega.</div>
         </div>
       </section>
 

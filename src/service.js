@@ -191,7 +191,41 @@ function meFromReq(req) {
 
 // ---- Plans (public) ----------------------------------------------------------
 function getPublicPlans() {
-  return { plans: store.allPlans().filter((p) => p.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)) };
+  const s = store.getSettings() || {};
+  return {
+    plans: store.allPlans().filter((p) => p.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)),
+    // Non-sensitive payment display info for the pricing page. Empty until an
+    // admin configures it under Admin -> Payments.
+    payment: {
+      upi: s.payUpi || '',
+      qr: s.payQr || '',
+      name: s.payName || '',
+      note: s.payNote || '',
+      enabled: !!(s.payUpi || s.payQr),
+    },
+  };
+}
+
+// ---- Payments (admin-managed UPI QR) ----------------------------------------
+function adminSavePayment(body) {
+  body = body || {};
+  const qr = String(body.qr || '').trim();
+  // Only allow an https image URL or an inline image data-URL — never arbitrary
+  // markup, since this string is rendered in an <img src> on the pricing page.
+  if (qr && !/^https:\/\//i.test(qr) && !/^data:image\//i.test(qr)) {
+    return { ok: false, error: 'QR ko https:// URL ya data:image/... hona chahiye' };
+  }
+  if (qr.length > 500000) return { ok: false, error: 'QR data bahut bada hai (500KB se kam rakho)' };
+  const settings = store.setSettings({
+    payUpi: String(body.upi || '').trim(),
+    payQr: qr,
+    payName: String(body.name || '').trim(),
+    payNote: String(body.note || '').trim(),
+  });
+  return {
+    ok: true,
+    payment: { upi: settings.payUpi, qr: settings.payQr, name: settings.payName, note: settings.payNote },
+  };
 }
 
 // ---- Platform admin (users / plans / subscriptions) --------------------------
@@ -239,6 +273,8 @@ module.exports = {
   doSignup, doLogin, meFromReq,
   // plans
   getPublicPlans,
+  // payments
+  adminSavePayment,
   // platform admin
   isPlatformAdmin, adminListUsers, adminSetUserPlan, adminDeleteUser, adminUpsertPlan, adminDeletePlan,
 };

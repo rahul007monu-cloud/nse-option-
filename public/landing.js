@@ -76,6 +76,8 @@ fetch('/api/auth?action=me', { credentials: 'same-origin' })
   .then((d) => {
     if (!d.user) return; // stay with the logged-out markup in index.html
     const u = d.user;
+    window.__loggedIn = true;
+    updatePricingCtas(); // point "Choose <plan>" at the dashboard, not signup
 
     const nav = document.getElementById('navAuth');
     if (nav) nav.innerHTML =
@@ -100,7 +102,10 @@ fetch('/api/symbols').then((r) => r.json()).then((d) => {
 }).catch(() => {});
 
 // ---- pricing ---------------------------------------------------------------
+let PAYMENT = null;
+
 fetch('/api/plans').then((r) => r.json()).then((d) => {
+  PAYMENT = d.payment || null;
   const grid = document.getElementById('pricingGrid');
   if (!grid) return;
   grid.innerHTML = (d.plans || []).map((p) => {
@@ -108,19 +113,75 @@ fetch('/api/plans').then((r) => r.json()).then((d) => {
     const feats = (p.highlights || p.features || []).map((f) => `<li>${escapeHtml(f)}</li>`).join('');
     const amt = p.price === 0 ? 'Free' : '₹' + p.price;
     const per = p.price === 0 ? '' : ` <small>/ ${p.period}</small>`;
+    const paid = Number(p.price) > 0;
+    // Free -> signup/dashboard. Paid -> open the payment (UPI QR) modal.
+    const cta = paid
+      ? `<button class="btn ${pop ? '' : 'ghost'} price-cta" data-paid="1" data-plan="${escapeHtml(p.name)}" data-price="${p.price}" data-period="${escapeHtml(p.period || '')}">Choose ${escapeHtml(p.name)}</button>`
+      : `<a class="btn ${pop ? '' : 'ghost'} price-cta" href="/auth.html?mode=signup">Get started</a>`;
     return `<div class="price-card ${pop ? 'pop' : ''}">
       ${pop ? `<span class="price-badge">${p.badge || 'Popular'}</span>` : ''}
       <div class="price-name">${escapeHtml(p.name)}</div>
       <div class="price-tag">${escapeHtml(p.tagline || '')}</div>
       <div class="price-amt">${amt}${per}</div>
       <ul class="price-feats">${feats}</ul>
-      <a class="btn ${pop ? '' : 'ghost'}" href="/auth.html?mode=signup">Choose ${escapeHtml(p.name)}</a>
+      ${cta}
     </div>`;
   }).join('');
+  wirePricingCtas();
+  updatePricingCtas();
 }).catch(() => {
   const grid = document.getElementById('pricingGrid');
   if (grid) grid.textContent = 'Could not load plans.';
 });
+
+function wirePricingCtas() {
+  document.querySelectorAll('.price-cta[data-paid="1"]').forEach((btn) => {
+    btn.addEventListener('click', () => openPayModal({
+      plan: btn.dataset.plan, price: btn.dataset.price, period: btn.dataset.period,
+    }));
+  });
+}
+
+// Free-plan CTA text tweak when already logged in.
+function updatePricingCtas() {
+  if (!window.__loggedIn) return;
+  document.querySelectorAll('a.price-cta').forEach((a) => {
+    a.setAttribute('href', '/app.html');
+    a.textContent = 'Open Dashboard →';
+  });
+}
+
+// ---- payment (UPI QR) modal ------------------------------------------------
+function openPayModal(sel) {
+  const p = PAYMENT;
+  let inner;
+  if (!p || !p.enabled) {
+    inner =
+      `<h3>${escapeHtml(sel.plan)} — ₹${escapeHtml(sel.price)}/${escapeHtml(sel.period)}</h3>` +
+      `<p class="pay-note">Payment setup abhi baaki hai. Thodi der me try karo, ya admin se contact karo.</p>`;
+  } else {
+    inner =
+      `<h3>${escapeHtml(sel.plan)} — ₹${escapeHtml(sel.price)}/${escapeHtml(sel.period)}</h3>` +
+      `<p class="pay-sub">Neeche wale UPI QR pe pay karo:</p>` +
+      (p.qr ? `<img class="pay-qr" src="${escapeHtml(p.qr)}" alt="UPI QR" />` : '') +
+      (p.upi ? `<div class="pay-upi">UPI: <b>${escapeHtml(p.upi)}</b></div>` : '') +
+      (p.name ? `<div class="pay-name">${escapeHtml(p.name)}</div>` : '') +
+      `<p class="pay-note">${p.note ? escapeHtml(p.note) : 'Payment ke baad admin tumhara plan activate kar dega.'}</p>` +
+      (window.__loggedIn ? '' : `<a class="btn" href="/auth.html?mode=signup">Pehle account banao</a>`);
+  }
+  let modal = document.getElementById('payModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'payModal';
+    modal.className = 'pay-modal';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div class="pay-box"><button class="pay-x" aria-label="Close">×</button>${inner}</div>`;
+  modal.style.display = 'flex';
+  const close = () => { modal.style.display = 'none'; };
+  modal.querySelector('.pay-x').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

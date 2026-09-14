@@ -52,9 +52,12 @@ function render(d) {
   $('mockBanner').style.display = d.source === 'mock' ? '' : 'none';
   // meta
   const when = new Date(d.generatedAt).toLocaleTimeString('en-IN');
+  const scanned = d.capped ? (d.universe - d.capped) : d.universe;
   $('scanMeta').innerHTML =
-    `Scanned <b>${d.universe}</b> instruments · ${d.marketOpen ? '🟢 market open' : '🔴 market closed'} · ${when}` +
-    (d.cached ? ' · <span class="muted">(cached)</span>' : '');
+    `Scanned <b>${scanned}</b>${d.capped ? ` of ${d.universe}` : ''} instruments · ` +
+    `${d.marketOpen ? '🟢 market open' : '🔴 market closed'} · ${when}` +
+    (d.cached ? ' · <span class="muted">(cached)</span>' : '') +
+    (d.capped ? ` · <span class="muted">live mode top ${scanned} (speed); Mock scans all</span>` : '');
 
   // tabs with counts
   $('tabs').innerHTML = ROOMS.map(

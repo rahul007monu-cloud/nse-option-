@@ -64,6 +64,7 @@ async function boot() {
   loadUsers();
   loadPlans();
   loadCreds(status);
+  loadPayment();
 }
 boot();
 
@@ -179,6 +180,40 @@ $('savePlan').addEventListener('click', async () => {
   $('planMsg').textContent = j.ok ? '✅ Saved' : '❌ ' + (j.reason || j.error || 'failed');
   $('planMsg').style.color = j.ok ? 'var(--a-up)' : 'var(--a-down)';
   if (j.ok) { loadPlans(); loadUsers(); }
+});
+
+// ---- Payments (UPI QR) -----------------------------------------------------
+async function loadPayment() {
+  try {
+    const j = await (await fetch('/api/plans')).json();
+    const p = (j && j.payment) || {};
+    if ($('pay_upi')) $('pay_upi').value = p.upi || '';
+    if ($('pay_qr')) $('pay_qr').value = p.qr || '';
+    if ($('pay_name')) $('pay_name').value = p.name || '';
+    if ($('pay_note')) $('pay_note').value = p.note || '';
+    renderPayPreview(p);
+  } catch (_) {}
+}
+function renderPayPreview(p) {
+  const box = $('payPreview');
+  if (!box) return;
+  if (!p || (!p.qr && !p.upi)) { box.textContent = 'Save karke yahan QR preview dikhega.'; return; }
+  box.innerHTML =
+    (p.qr ? `<img src="${esc(p.qr)}" alt="UPI QR" style="max-width:220px;border-radius:12px;background:#fff;padding:8px" />` : '') +
+    (p.upi ? `<div style="margin-top:8px">UPI: <b>${esc(p.upi)}</b></div>` : '') +
+    (p.name ? `<div>${esc(p.name)}</div>` : '') +
+    (p.note ? `<div style="margin-top:6px;color:var(--a-muted)">${esc(p.note)}</div>` : '');
+}
+if ($('savePay')) $('savePay').addEventListener('click', async () => {
+  $('payMsg').textContent = 'Saving…'; $('payMsg').style.color = 'var(--a-muted)';
+  const body = {
+    upi: $('pay_upi').value.trim(), qr: $('pay_qr').value.trim(),
+    name: $('pay_name').value.trim(), note: $('pay_note').value.trim(),
+  };
+  const j = await (await fetch('/api/admin?action=pay-save', { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })).json();
+  $('payMsg').textContent = j.ok ? '✅ Saved' : '❌ ' + (j.reason || j.error || 'failed');
+  $('payMsg').style.color = j.ok ? 'var(--a-up)' : 'var(--a-down)';
+  if (j.ok) renderPayPreview(j.payment);
 });
 
 // ---- API credentials -------------------------------------------------------

@@ -291,7 +291,7 @@ function buildMock(symbol, cfg, expiryDate, marketOpen) {
 // ---- LIVE NSE --------------------------------------------------------------
 // NSE serves gzip/brotli and requires a primed cookie jar obtained by first
 // visiting the site as a browser would. This client replicates that flow.
-const LIVE_TIMEOUT = Number(process.env.NSE_TIMEOUT_MS || 8000);
+const LIVE_TIMEOUT = Number(process.env.NSE_TIMEOUT_MS || 4500);
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
 
@@ -431,7 +431,11 @@ async function getOptionChain(symbol, opts = {}) {
     } catch (_) { /* fall through */ }
   }
 
-  if (!opts.preferMock) {
+  // The direct live-NSE path primes cookies then hits the JSON API — several
+  // HTTPS round-trips per symbol, each up to LIVE_TIMEOUT. Fine for one symbol,
+  // fatal for the ~300-symbol scanner (and it just 403s from datacenter IPs
+  // anyway). skipLive lets the scanner go broker-or-mock and stay fast.
+  if (!opts.preferMock && !opts.skipLive) {
     try {
       const chain = await fetchLiveNSE(symbol, cfg);
       if (chain && chain.rows && chain.rows.length) {
