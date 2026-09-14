@@ -118,6 +118,16 @@ function render(d) {
   srcEl.textContent = srcMap[d.source] || d.source;
   srcEl.className = 'src src-' + d.source;
   $('mockBanner').style.display = d.source === 'mock' ? '' : 'none';
+  // Surface WHY we're on mock (real broker error) instead of leaving it a mystery.
+  const mr = $('mockReason');
+  if (mr) {
+    if (d.source === 'mock' && d.sourceError) {
+      mr.style.display = '';
+      mr.textContent = '⛔ Live source fail: ' + d.sourceError;
+    } else {
+      mr.style.display = 'none';
+    }
+  }
 
   // momentum
   const m = d.momentum;

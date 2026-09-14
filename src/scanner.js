@@ -71,6 +71,7 @@ async function runScan(opts = {}) {
   const rooms = { atSupport: [], at20dema: [], bullish: [], bearish: [], goldenCross: [], breakout: [] };
   let marketOpen = true;
   let source = 'mock';
+  let sourceError = null;
 
   // scan in parallel chunks to keep it fast without hammering
   const CHUNK = 40;
@@ -84,6 +85,7 @@ async function runScan(opts = {}) {
       const { a, cross, cross2, brk } = r;
       marketOpen = a.marketOpen;
       source = a.source;
+      if (a.sourceError && !sourceError) sourceError = a.sourceError;
       const ma = a.movingAverages;
 
       // proximity to support
@@ -163,8 +165,10 @@ async function runScan(opts = {}) {
     generatedAt: new Date().toISOString(),
     marketOpen,
     source,
-    universe: symbols.length,
-    capped, // how many symbols were skipped in live mode (0 in mock)
+    sourceError,
+    universe: fullUniverse,      // total F&O instruments (fixes the "-221" count)
+    scanned: symbols.length,     // how many were actually scanned this run
+    capped,                      // skipped in live mode (0 in mock)
     counts: Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.length])),
     rooms,
   };
