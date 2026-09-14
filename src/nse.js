@@ -109,11 +109,14 @@ function setBrokerFetcher(fn) { brokerFetcher = typeof fn === 'function' ? fn : 
 function setHistoryFetcher(fn) { historyFetcher = typeof fn === 'function' ? fn : null; }
 
 // ---- Expiry helpers --------------------------------------------------------
+// NSE moved weekly F&O expiry from Thursday to TUESDAY effective 2025-09-01.
+// Override with EXPIRY_WEEKDAY if the exchange changes it again (0=Sun..6=Sat).
+const EXPIRY_WEEKDAY = Number(process.env.EXPIRY_WEEKDAY || 2); // 2 = Tuesday
 function nextWeeklyExpiries(count = 4) {
   const out = [];
   const d = new Date();
   d.setHours(15, 30, 0, 0);
-  while (d.getDay() !== 4) d.setDate(d.getDate() + 1); // next Thursday
+  while (d.getDay() !== EXPIRY_WEEKDAY) d.setDate(d.getDate() + 1); // next expiry weekday
   for (let i = 0; i < count; i++) {
     const e = new Date(d);
     e.setDate(d.getDate() + i * 7);
