@@ -1,33 +1,24 @@
 'use strict';
 
 // Vercel serverless function -> GET /api/analysis?symbol=NIFTY&mock=1&expiry=0
-const { getAnalysis } = require('../src/service');
-
-function query(req) {
-  if (req.query) return req.query;
-  try {
-    return Object.fromEntries(new URL(req.url, 'http://x').searchParams);
-  } catch (_) {
-    return {};
-  }
-}
+// Requires a logged-in session with the `chain` feature.
+const service = require('../src/service');
+const { query, send, sendDenied } = require('../src/http');
 
 module.exports = async (req, res) => {
   try {
+    const gate = service.authorize(req, 'chain');
+    if (!gate.ok) return sendDenied(res, gate);
+
     const q = query(req);
-    const result = await getAnalysis({
+    const result = await service.getAnalysis({
       symbol: q.symbol || 'NIFTY',
       mock: q.mock === '1' || q.mock === 'true',
       expiryIndex: parseInt(q.expiry || '0', 10) || 0,
+      features: service.featuresFor(gate.user),
     });
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.statusCode = 200;
-    res.end(JSON.stringify(result));
+    return send(res, 200, result);
   } catch (err) {
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify({ error: 'Internal error', detail: String(err && err.message) }));
+    return send(res, 500, { error: 'Internal error', detail: String(err && err.message) });
   }
 };

@@ -5,18 +5,20 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
+  const toLogin = () =>
+    location.replace('/auth.html?next=' + encodeURIComponent(location.pathname));
+
   fetch('/api/auth/me', { credentials: 'same-origin' })
     .then((r) => r.json())
     .then((d) => {
-      if (!d.user) {
-        location.replace('/auth.html?next=' + encodeURIComponent(location.pathname));
-        return;
-      }
+      if (!d.user) return toLogin();
       window.__USER__ = d.user;
       document.addEventListener('DOMContentLoaded', () => injectChip(d.user));
       if (document.readyState !== 'loading') injectChip(d.user);
     })
-    .catch(() => {});
+    // Fail closed: if we can't confirm a session, send them to login rather than
+    // leaving them on a gated page that will only render errors.
+    .catch(() => toLogin());
 
   function injectChip(u) {
     const host = document.getElementById('userChip') || document.querySelector('.controls');

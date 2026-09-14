@@ -114,7 +114,63 @@ async function getAnalysis(q = {}) {
     nse.getOptionChain(symbol, { preferMock, expiryIndex }),
     nse.getDailyHistory(symbol, { preferMock }),
   ]);
-  return analyze(chain, { daily });
+  return applyEntitlements(analyze(chain, { daily }), q.features);
+}
+
+// ---- Authorization gate for data endpoints ----------------------------------
+/**
+ * Server-side gate for every data endpoint.
+ *
+ * public/guard.js only *redirects the page* when logged out — it does nothing to
+ * stop `curl /api/analysis`. So authorization has to be enforced here, on the
+ * server, or the whole product is free to anyone who opens devtools.
+ *
+ * Admins bypass feature checks, so the owner can never lock themselves out of
+ * their own deployment by editing plans.
+ *
+ * @returns {{ok:true,user:object}|{ok:false,status:number,error:string}}
+ */
+function authorize(req, feature) {
+  if (!auth.authConfigured()) {
+    return { ok: false, status: 503, error: auth.CONFIG_ERROR };
+  }
+  const user = auth.currentUser(req);
+  if (!user) return { ok: false, status: 401, error: 'Login zaroori hai' };
+  if (user.role === 'admin') return { ok: true, user, admin: true };
+  if (feature && !auth.userHasFeature(user, feature)) {
+    const pu = auth.publicUser(user);
+    return {
+      ok: false,
+      status: 403,
+      error: `Ye feature tumhare "${pu.planName}" plan me shaamil nahi hai.`,
+      needsFeature: feature,
+      planId: pu.planId,
+    };
+  }
+  return { ok: true, user };
+}
+
+/** Feature list for a user, with admins treated as having everything. */
+function featuresFor(user) {
+  if (!user) return null;
+  if (user.role === 'admin') return null; // null = unrestricted
+  const pu = auth.publicUser(user);
+  return pu ? pu.features : [];
+}
+
+/**
+ * Strip plan-gated data out of an analysis payload. Doing this server-side (not
+ * by hiding DOM in the browser) is what actually makes a plan mean something.
+ */
+function applyEntitlements(result, features) {
+  if (!features) return result; // admin / unrestricted
+  const locked = [];
+  if (!features.includes('dema')) {
+    result.movingAverages = null;
+    locked.push('dema');
+  }
+  if (locked.length) result.locked = locked;
+  return result;
 }
 
 // ---- Auth --------------------------------------------------------------------
@@ -177,6 +233,8 @@ function adminDeletePlan(body) {
 module.exports = {
   getHealth, getSymbols, getAnalysis, getScan,
   adminAuthOK, adminLockReason, getAdminStatus, saveAdminCreds, clearAdminCreds, testBroker,
+  // authorization
+  authorize, featuresFor,
   // auth
   doSignup, doLogin, meFromReq,
   // plans

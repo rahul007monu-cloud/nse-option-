@@ -77,8 +77,23 @@ async function refresh() {
   const mock = $('mock').checked ? '1' : '0';
   const expiry = $('expiry').value || '0';
   try {
-    const r = await fetch(`/api/analysis?symbol=${symbol}&mock=${mock}&expiry=${expiry}`);
+    const r = await fetch(`/api/analysis?symbol=${symbol}&mock=${mock}&expiry=${expiry}`, {
+      credentials: 'same-origin',
+    });
     const data = await r.json();
+
+    // The server now gates this endpoint, so handle the refusals explicitly
+    // instead of trying to render an error object as a chain.
+    if (r.status === 401) {
+      if (timer) { clearInterval(timer); timer = null; }
+      location.replace('/auth.html?next=' + encodeURIComponent(location.pathname));
+      return;
+    }
+    if (!r.ok) {
+      if (timer) { clearInterval(timer); timer = null; }
+      $('summary').textContent = (data && data.error) || `Request failed (${r.status})`;
+      return;
+    }
     render(data);
   } catch (e) {
     $('summary').textContent = 'Error fetching analysis: ' + e.message;
@@ -140,7 +155,7 @@ function render(d) {
   $('pcrChg').textContent = d.pcrChange == null ? '—' : fmt(d.pcrChange, 2);
 
   // DEMA (rebuild only when values change)
-  renderDEMA(d.movingAverages);
+  renderDEMA(d.movingAverages, d.locked);
 
   // option chain (in-place)
   updateTable(d);
@@ -301,9 +316,27 @@ function flash(el, dir) {
   el.classList.add(dir === 'up' ? 'flash-up' : 'flash-down');
 }
 
-function renderDEMA(ma) {
+function renderDEMA(ma, locked) {
   const card = $('demaCard');
-  if (!ma || !ma.levels) { card.style.display = 'none'; return; }
+  // DEMA is a paid feature: the server strips movingAverages for plans without
+  // it, so show an upgrade prompt rather than an empty card.
+  if (!ma || !ma.levels) {
+    if (locked && locked.includes('dema')) {
+      card.style.display = '';
+      $('trendBadge').textContent = '🔒 Upgrade';
+      $('trendBadge').style.color = 'var(--muted)';
+      $('demaRow').innerHTML =
+        '<div class="dema-cell" style="border-color:var(--muted)">' +
+        '<span class="dema-name">DEMA levels</span>' +
+        '<span class="dema-tag" style="color:var(--muted)">PRO PLAN</span>' +
+        '<span class="dema-dist">10/20/50/100/200 daily EMA support &amp; resistance</span>' +
+        '</div>';
+      lastDemaKey = 'locked';
+      return;
+    }
+    card.style.display = 'none';
+    return;
+  }
   card.style.display = '';
   const key = ma.levels.map((l) => l.name + l.value + l.role).join('|') + ma.trend.label;
   $('trendBadge').textContent = 'Trend: ' + ma.trend.label;
