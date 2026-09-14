@@ -35,7 +35,10 @@ async function submit() {
   if (!body.email || !body.password) { msg('Email aur password daalo', false); return; }
   msg('Please wait…', true);
   try {
-    const url = mode === 'signup' ? '/api/auth/signup' : '/api/auth/login';
+    // Query-param form (?action=) instead of a path segment, so this never
+    // depends on a Vercel path rewrite being active. A POST to an unmatched
+    // path on Vercel falls through to static hosting and returns 405.
+    const url = '/api/auth?action=' + (mode === 'signup' ? 'signup' : 'login');
     const r = await fetch(url, {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

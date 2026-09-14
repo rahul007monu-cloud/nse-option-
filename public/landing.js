@@ -71,7 +71,7 @@
 })();
 
 // ---- auth state: only show app links to a logged-in visitor ----------------
-fetch('/api/auth/me', { credentials: 'same-origin' })
+fetch('/api/auth?action=me', { credentials: 'same-origin' })
   .then((r) => r.json())
   .then((d) => {
     if (!d.user) return; // stay with the logged-out markup in index.html

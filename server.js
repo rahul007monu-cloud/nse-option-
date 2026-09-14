@@ -94,46 +94,61 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = parsed.pathname;
+  // Action for the multiplexed endpoints: ?action= first (what the frontend
+  // now sends), else the trailing path segment (back-compat). Mirrors
+  // src/http.js so local and Vercel behave identically.
+  const actionOf = (name) => {
+    const q = parsed.searchParams.get('action');
+    if (q) return q.toLowerCase();
+    const seg = pathname.split('/').filter(Boolean).pop() || '';
+    return seg === name ? '' : seg.toLowerCase();
+  };
+
   try {
     // ---- Auth ----
-    if (pathname === '/api/auth/signup' && req.method === 'POST') {
-      const r = service.doSignup(await readBody(req));
-      if (!r.ok) return sendJSON(res, 400, r);
-      return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
-    }
-    if (pathname === '/api/auth/login' && req.method === 'POST') {
-      const r = service.doLogin(await readBody(req));
-      if (!r.ok) return sendJSON(res, 401, r);
-      return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
-    }
-    if (pathname === '/api/auth/logout') {
-      return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
-    }
-    if (pathname === '/api/auth/me') {
-      return sendJSON(res, 200, service.meFromReq(req));
+    if (pathname === '/api/auth' || pathname.startsWith('/api/auth/')) {
+      const what = actionOf('auth');
+      if (what === 'signup') {
+        if (req.method !== 'POST') return sendJSON(res, 405, { error: 'POST only' });
+        const r = service.doSignup(await readBody(req));
+        if (!r.ok) return sendJSON(res, 400, r);
+        return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
+      }
+      if (what === 'login') {
+        if (req.method !== 'POST') return sendJSON(res, 405, { error: 'POST only' });
+        const r = service.doLogin(await readBody(req));
+        if (!r.ok) return sendJSON(res, 401, r);
+        return sendJSON(res, 200, { ok: true, user: r.user }, { 'Set-Cookie': auth.sessionCookie(r.token) });
+      }
+      if (what === 'logout') return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': auth.clearCookie() });
+      if (what === 'me') return sendJSON(res, 200, service.meFromReq(req));
+      return sendJSON(res, 404, { error: 'Unknown auth action: ' + (what || '(none)') });
     }
     if (pathname === '/api/plans') {
       return sendJSON(res, 200, service.getPublicPlans());
     }
 
     // ---- Admin (credentials + platform admin) ----
-    if (pathname.startsWith('/api/admin')) {
+    if (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) {
       // Header only — a ?token= query param would leak the admin password into
       // access logs, browser history and Referer headers.
       const token = req.headers['x-admin-token'] || '';
       if (!service.isPlatformAdmin(req, token, req.headers.host)) {
         return sendJSON(res, 401, { error: 'Admin locked', reason: service.adminLockReason(req.headers.host) });
       }
-      if (pathname === '/api/admin/status') return sendJSON(res, 200, service.getAdminStatus());
-      if (pathname === '/api/admin/save' && req.method === 'POST') return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
-      if (pathname === '/api/admin/clear' && req.method === 'POST') return sendJSON(res, 200, service.clearAdminCreds());
-      if (pathname === '/api/admin/test' && req.method === 'POST') return sendJSON(res, 200, await service.testBroker());
-      if (pathname === '/api/admin/users') return sendJSON(res, 200, service.adminListUsers());
-      if (pathname === '/api/admin/user-plan' && req.method === 'POST') return sendJSON(res, 200, service.adminSetUserPlan(await readBody(req)));
-      if (pathname === '/api/admin/user-delete' && req.method === 'POST') return sendJSON(res, 200, service.adminDeleteUser(await readBody(req)));
-      if (pathname === '/api/admin/plan-save' && req.method === 'POST') return sendJSON(res, 200, service.adminUpsertPlan(await readBody(req)));
-      if (pathname === '/api/admin/plan-delete' && req.method === 'POST') return sendJSON(res, 200, service.adminDeletePlan(await readBody(req)));
-      return sendJSON(res, 404, { error: 'Unknown admin endpoint' });
+      const what = actionOf('admin');
+      const mutations = ['save', 'clear', 'test', 'user-plan', 'user-delete', 'plan-save', 'plan-delete'];
+      if (mutations.includes(what) && req.method !== 'POST') return sendJSON(res, 405, { error: 'POST only: ' + what });
+      if (what === 'status') return sendJSON(res, 200, service.getAdminStatus());
+      if (what === 'save') return sendJSON(res, 200, service.saveAdminCreds(await readBody(req)));
+      if (what === 'clear') return sendJSON(res, 200, service.clearAdminCreds());
+      if (what === 'test') return sendJSON(res, 200, await service.testBroker());
+      if (what === 'users') return sendJSON(res, 200, service.adminListUsers());
+      if (what === 'user-plan') return sendJSON(res, 200, service.adminSetUserPlan(await readBody(req)));
+      if (what === 'user-delete') return sendJSON(res, 200, service.adminDeleteUser(await readBody(req)));
+      if (what === 'plan-save') return sendJSON(res, 200, service.adminUpsertPlan(await readBody(req)));
+      if (what === 'plan-delete') return sendJSON(res, 200, service.adminDeletePlan(await readBody(req)));
+      return sendJSON(res, 404, { error: 'Unknown admin action: ' + (what || '(none)') });
     }
 
     if (pathname === '/api/health') {

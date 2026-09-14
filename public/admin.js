@@ -40,11 +40,11 @@ document.querySelectorAll('.a-nav button').forEach((b) =>
 // ---- boot: check admin access ---------------------------------------------
 async function boot() {
   let me = null;
-  try { me = (await (await fetch('/api/auth/me', { credentials: 'same-origin' })).json()).user; } catch (_) {}
+  try { me = (await (await fetch('/api/auth?action=me', { credentials: 'same-origin' })).json()).user; } catch (_) {}
   // Try admin status (session admin OR ADMIN_TOKEN OR localhost). 401 -> locked.
   let status;
   try {
-    const r = await fetch('/api/admin/status', {
+    const r = await fetch('/api/admin?action=status', {
       credentials: 'same-origin',
       headers: { 'x-admin-token': token() },
     });
@@ -110,7 +110,7 @@ function renderDashboard(s) {
 // ---- users -----------------------------------------------------------------
 async function loadUsers() {
   try {
-    const j = await (await fetch('/api/admin/users', { headers: { 'x-admin-token': token() } })).json();
+    const j = await (await fetch('/api/admin?action=users', { headers: { 'x-admin-token': token() } })).json();
     const users = j.users || [];
     $('cUsers').textContent = users.length;
     const planOpts = (sel) => PLANS.map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
@@ -130,12 +130,12 @@ function bindUserRows() {
     if (sv) sv.addEventListener('click', async () => {
       const planId = tr.querySelector('.u-plan').value;
       const days = tr.querySelector('.u-days').value;
-      await fetch('/api/admin/user-plan', { method: 'POST', headers: authHdr(), body: JSON.stringify({ userId: Number(id), planId, days: days ? Number(days) : null }) });
+      await fetch('/api/admin?action=user-plan', { method: 'POST', headers: authHdr(), body: JSON.stringify({ userId: Number(id), planId, days: days ? Number(days) : null }) });
       loadUsers();
     });
     if (dl) dl.addEventListener('click', async () => {
       if (!confirm('Delete user #' + id + '?')) return;
-      await fetch('/api/admin/user-delete', { method: 'POST', headers: authHdr(), body: JSON.stringify({ userId: Number(id) }) });
+      await fetch('/api/admin?action=user-delete', { method: 'POST', headers: authHdr(), body: JSON.stringify({ userId: Number(id) }) });
       loadUsers();
     });
   });
@@ -156,7 +156,7 @@ async function loadPlans() {
     document.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editPlan(b.dataset.edit)));
     document.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('Delete plan ' + b.dataset.del + '?')) return;
-      await fetch('/api/admin/plan-delete', { method: 'POST', headers: authHdr(), body: JSON.stringify({ id: b.dataset.del }) });
+      await fetch('/api/admin?action=plan-delete', { method: 'POST', headers: authHdr(), body: JSON.stringify({ id: b.dataset.del }) });
       loadPlans();
     }));
   } catch (e) {}
@@ -175,7 +175,7 @@ $('savePlan').addEventListener('click', async () => {
     period: $('pl_period').value.trim(), tagline: $('pl_tag').value.trim(),
     features: $('pl_features').value, highlights: $('pl_highlights').value,
   };
-  const j = await (await fetch('/api/admin/plan-save', { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })).json();
+  const j = await (await fetch('/api/admin?action=plan-save', { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })).json();
   $('planMsg').textContent = j.ok ? '✅ Saved' : '❌ ' + (j.reason || j.error || 'failed');
   $('planMsg').style.color = j.ok ? 'var(--a-up)' : 'var(--a-down)';
   if (j.ok) { loadPlans(); loadUsers(); }
@@ -192,16 +192,16 @@ function cmsg(t, ok) { $('msg').textContent = t; $('msg').style.color = ok ? 'va
 $('save').addEventListener('click', async () => {
   cmsg('Saving…', true);
   const body = { apiKey: $('apiKey').value.trim(), clientCode: $('clientCode').value.trim(), mpin: $('mpin').value.trim(), totpSecret: $('totpSecret').value.trim() };
-  const j = await (await fetch('/api/admin/save', { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })).json();
+  const j = await (await fetch('/api/admin?action=save', { method: 'POST', headers: authHdr(), body: JSON.stringify(body) })).json();
   cmsg(j.ok ? '✅ Saved' + (j.ephemeral ? ' (Vercel temporary — use Env Vars!)' : '') + '. Ab Test dabao.' : '❌ ' + (j.reason || j.error), j.ok);
 });
 $('test').addEventListener('click', async () => {
   cmsg('🔌 Testing live login + fetch…', true);
-  const j = await (await fetch('/api/admin/test', { method: 'POST', headers: authHdr() })).json();
+  const j = await (await fetch('/api/admin?action=test', { method: 'POST', headers: authHdr() })).json();
   cmsg(j.ok ? `✅ LIVE OK! NIFTY ${j.spot}, ${j.strikes} strikes` : '❌ ' + (j.reason || j.error), j.ok);
 });
 $('clear').addEventListener('click', async () => {
   if (!confirm('Clear saved credentials?')) return;
-  const j = await (await fetch('/api/admin/clear', { method: 'POST', headers: authHdr() })).json();
+  const j = await (await fetch('/api/admin?action=clear', { method: 'POST', headers: authHdr() })).json();
   cmsg(j.ok ? '🗑 Cleared' : '❌ failed', j.ok);
 });
